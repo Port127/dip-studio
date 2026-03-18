@@ -1,8 +1,10 @@
 import {
-  OpenClawGatewayClient,
-  createAgentsListRequest
+  OpenClawGatewayClient
 } from "../infra/openclaw-gateway-client";
-import type { OpenClawAgentsListResult } from "../types/openclaw";
+import type {
+  OpenClawAgentsListResult,
+  OpenClawRequestFrame
+} from "../types/openclaw";
 
 /**
  * Defines the business capability used to read OpenClaw agents.
@@ -14,6 +16,23 @@ export interface OpenClawAgentsService {
    * @returns The OpenClaw `AgentsListResult` payload.
    */
   listAgents(): Promise<OpenClawAgentsListResult>;
+}
+
+/**
+ * Creates the OpenClaw `agents.list` request.
+ *
+ * @param requestId The frame correlation id.
+ * @returns A serialized OpenClaw request frame.
+ */
+export function createAgentsListRequest(
+  requestId: string
+): OpenClawRequestFrame {
+  return {
+    type: "req",
+    id: requestId,
+    method: "agents.list",
+    params: {}
+  };
 }
 
 /**

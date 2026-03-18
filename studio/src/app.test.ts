@@ -24,7 +24,6 @@ import { getOpenClawAgents } from "./routes/openclaw";
 import {
   asError,
   asTransportError,
-  createAgentsListRequest,
   createConnectRequest,
   createDeviceSignaturePayload,
   createDefaultWebSocket,
@@ -42,7 +41,10 @@ import {
   toBase64Url,
   type OpenClawWebSocket
 } from "./infra/openclaw-gateway-client";
-import type { OpenClawAgentsService } from "./services/openclaw-agents-service";
+import {
+  createAgentsListRequest,
+  type OpenClawAgentsService
+} from "./services/openclaw-agents-service";
 import type {
   OpenClawAgentsListResult,
   OpenClawEventFrame,

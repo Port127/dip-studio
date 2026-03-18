@@ -774,23 +774,6 @@ export function createConnectRequest(
 }
 
 /**
- * Creates the OpenClaw `agents.list` request.
- *
- * @param requestId The frame correlation id.
- * @returns A serialized OpenClaw request frame.
- */
-export function createAgentsListRequest(
-  requestId: string
-): OpenClawRequestFrame {
-  return {
-    type: "req",
-    id: requestId,
-    method: "agents.list",
-    params: {}
-  };
-}
-
-/**
  * Identifies `connect.challenge` frames.
  *
  * @param frame The parsed gateway frame.

@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { DefaultOpenClawAgentsService } from "./openclaw-agents-service";
+import {
+  DefaultOpenClawAgentsService,
+  createAgentsListRequest
+} from "./openclaw-agents-service";
+
+describe("createAgentsListRequest", () => {
+  it("builds the agents.list JSON RPC frame", () => {
+    expect(createAgentsListRequest("req-2")).toEqual({
+      type: "req",
+      id: "req-2",
+      method: "agents.list",
+      params: {}
+    });
+  });
+});
 
 describe("DefaultOpenClawAgentsService", () => {
   it("delegates agents.list to the shared gateway client", async () => {
