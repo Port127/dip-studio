@@ -11,4 +11,5 @@
 - `src/logic/`：核心业务逻辑。
 - `src/middleware/`：通用中间件，例如 404 和错误处理。
 - `src/errors/`：领域内可复用的错误类型。
+- `src/scripts/`：系统初始化脚本。
 - `src/*.test.ts`：单元测试与接口测试。
