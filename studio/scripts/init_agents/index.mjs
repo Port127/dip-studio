@@ -5,63 +5,99 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 基础常量定义
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR || path.join(os.homedir(), ".openclaw");
-const EXTENSIONS_DIR = process.env.OPENCLAW_EXTENSIONS_DIR || path.join(__dirname, "..", "extensions");
+const BUILT_IN_DIR = path.join(__dirname, "../..", "built-in");
+const EXTENSIONS_DIR = process.env.OPENCLAW_EXTENSIONS_DIR || path.join(__dirname, "../..", "extensions");
+const WORKSPACE_ROOT = path.resolve(
+  process.env.OPENCLAW_WORKSPACE_DIR || STATE_DIR
+);
 
-// 各个 Agent 的专属人设配置字典
-const AGENT_PERSONAS = {
-  coordinator: `
-# 你的角色
-你是纯粹的自然语言意图提取器。不要以人类身份对话。
-
-# 工作流
-阅读用户的输入，直接输出一个严格的 JSON 对象，用来指示当前任务应该交由哪个底层数字员工处理：
-  {
-  "target_agent": "plan_agent", 
-  "target_de": "de_finance" // 如果用户提到具体业务智能体（如财务），必须提取其 ID
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-- 如果用户要求“定时”、“提醒”或“建立计划”，主要目标是 "plan_agent"。
-- 如果需求涉及具体业务（如查账、写码），必须在 "target_de" 中指明对应的智能体 ID（de_finance, skill_agent 等）。
-
-如果你认为用户在闲聊，输出 {"target_agent": "chit_chat"}；如果用户报错找不到人或意图不明，输出 {"target_agent": "unknown"}。
-
-# 核心纪律
-请务必只输出合法的 JSON，不要附加任何解释！不要寒暄！不要自己去查库或写代码！
-`.trim(),
-
-  skill_agent: `
-# 你的角色
-高级技能开发工程师。负责听懂人类新业务需求，从零编写或修改原子技能 (Skills)。
-
-# 工作流
-1. 理解需求与 API 文档。
-2. 使用skill-creator技能创建用户所需的技能。
-3. 局部验收通过后回复人类。
-4. 创建的技能放到你的workspace中的skill-factory目录中
-`.trim()
-};
-
-const AGENT_CONFIGS = [
-  {
-    id: "coordinator",
-    name: "总管路由智能体",
-    workspace: path.join(STATE_DIR, "workspace-coordinator"),
-    sandbox: { mode: "all", workspaceAccess: "ro" },
-    tools: {
-      allow: ["read"],
-      deny: ["group:runtime", "group:automation", "group:sessions"]
-    }
-  },
-  {
-    id: "skill_agent",
-    name: "高阶技能开发者",
-    workspace: path.join(STATE_DIR, "workspace-skill_agent"),
+function readOptionalTextFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return undefined;
   }
-];
 
-async function initOpenClawConfig() {
+  return fs.readFileSync(filePath, "utf8");
+}
+
+function assertBuiltInAgentMetadata(metadata, metadataPath) {
+  if (metadata.type !== "agent") {
+    throw new Error(`built-in metadata.type 必须为 agent: ${metadataPath}`);
+  }
+
+  if (metadata.is_builtin !== true) {
+    throw new Error(`built-in metadata.is_builtin 必须为 true: ${metadataPath}`);
+  }
+
+  if (typeof metadata.id !== "string" || metadata.id.trim() === "") {
+    throw new Error(`built-in metadata.id 必须为非空字符串: ${metadataPath}`);
+  }
+
+  if (typeof metadata.name !== "string" || metadata.name.trim() === "") {
+    throw new Error(`built-in metadata.name 必须为非空字符串: ${metadataPath}`);
+  }
+}
+
+function loadBuiltInAgents() {
+  if (!fs.existsSync(BUILT_IN_DIR) || !fs.statSync(BUILT_IN_DIR).isDirectory()) {
+    throw new Error(`未找到 built-in 目录: ${BUILT_IN_DIR}`);
+  }
+
+  const builtInAgents = fs.readdirSync(BUILT_IN_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const builtInPath = path.join(BUILT_IN_DIR, entry.name);
+      const metadataPath = path.join(builtInPath, "metadata.json");
+      if (!fs.existsSync(metadataPath)) {
+        return undefined;
+      }
+
+      const metadata = readJsonFile(metadataPath);
+      assertBuiltInAgentMetadata(metadata, metadataPath);
+
+      return {
+        id: metadata.id,
+        name: metadata.name,
+        workspace: path.join(WORKSPACE_ROOT, metadata.id),
+        sandbox: metadata.sandbox,
+        tools: metadata.tools,
+        builtInPath,
+        soul: readOptionalTextFile(path.join(builtInPath, "SOUL.md")),
+        identity: readOptionalTextFile(path.join(builtInPath, "IDENTITY.md"))
+      };
+    })
+    .filter(Boolean);
+
+  if (builtInAgents.length === 0) {
+    throw new Error(`built-in 目录中没有可用的内置 agent 定义: ${BUILT_IN_DIR}`);
+  }
+
+  return builtInAgents;
+}
+
+function upsertAgentConfig(agentConfigs, newAgent) {
+  const existingIndex = agentConfigs.findIndex((agent) => agent.id === newAgent.id);
+  if (existingIndex >= 0) {
+    agentConfigs[existingIndex] = {
+      ...agentConfigs[existingIndex],
+      name: newAgent.name,
+      workspace: newAgent.workspace,
+      sandbox: newAgent.sandbox,
+      tools: newAgent.tools
+    };
+    console.log(`[覆盖] 更新现有的 ${newAgent.id} 配置参数`);
+    return;
+  }
+
+  agentConfigs.push(newAgent);
+  console.log(`[新增] 在配置文件中注册 ${newAgent.id}`);
+}
+
+async function initOpenClawConfig(builtInAgents) {
   console.log("🛠️ 开始校准 openclaw.json 中的 Agent 配置...");
   const configPath = path.join(STATE_DIR, "openclaw.json");
   if (!fs.existsSync(configPath)) {
@@ -69,10 +105,9 @@ async function initOpenClawConfig() {
     return;
   }
 
-  const raw = fs.readFileSync(configPath, "utf8");
   let cfg;
   try {
-    cfg = JSON.parse(raw);
+    cfg = readJsonFile(configPath);
   } catch (err) {
     console.error("❌ openclaw.json 格式损坏，无法解析:", err);
     return;
@@ -81,96 +116,84 @@ async function initOpenClawConfig() {
   cfg.agents = cfg.agents || {};
   cfg.agents.list = cfg.agents.list || [];
 
-  let modifiedCount = 0;
-  for (const newAgent of AGENT_CONFIGS) {
-    const existingIndex = cfg.agents.list.findIndex(a => a.id === newAgent.id);
-    if (existingIndex >= 0) {
-      // 深度合并（如果原配置有 defaults 等其他属性则保留，这里只强写我们关心的配置）
-      cfg.agents.list[existingIndex] = {
-        ...cfg.agents.list[existingIndex],
-        name: newAgent.name,
-        workspace: newAgent.workspace,
-        sandbox: newAgent.sandbox,
-        tools: newAgent.tools,
-      };
-      console.log(`[覆盖] 更新现有的 ${newAgent.id} 配置参数`);
-    } else {
-      // 追加新的 
-      cfg.agents.list.push(newAgent);
-      console.log(`[新增] 在配置文件中注册 ${newAgent.id}`);
-    }
-    modifiedCount++;
+  for (const agent of builtInAgents) {
+    upsertAgentConfig(cfg.agents.list, {
+      id: agent.id,
+      name: agent.name,
+      workspace: agent.workspace,
+      sandbox: agent.sandbox,
+      tools: agent.tools
+    });
   }
 
-  if (modifiedCount > 0) {
-    // 开启 Gateway HTTP Endpoints 用于数字员工访问
-    cfg.gateway = cfg.gateway || {};
-    cfg.gateway.http = cfg.gateway.http || {};
-    cfg.gateway.http.endpoints = cfg.gateway.http.endpoints || {};
-    cfg.gateway.http.endpoints.chatCompletions = { enabled: true };
-    cfg.gateway.http.endpoints.responses = { enabled: true };
-    
-    console.log("[配置] 开启 Gateway HTTP Endpoints (chatCompletions, responses)");
+  cfg.gateway = cfg.gateway || {};
+  cfg.gateway.http = cfg.gateway.http || {};
+  cfg.gateway.http.endpoints = cfg.gateway.http.endpoints || {};
+  cfg.gateway.http.endpoints.chatCompletions = { enabled: true };
+  cfg.gateway.http.endpoints.responses = { enabled: true };
+  console.log("[配置] 开启 Gateway HTTP Endpoints (chatCompletions, responses)");
 
-    // 开启 archives-access 插件
-    cfg.plugins = cfg.plugins || {};
-    cfg.plugins.entries = cfg.plugins.entries || {};
-    cfg.plugins.entries["archives-access"] = { enabled: true };
-    console.log("[配置] 开启 archives-access 插件");
-
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
-    console.log(`✅ openclaw.json 成功写入 ${modifiedCount} 个核心数字员工的配置保障！\n`);
+  const pluginNames = loadLocalPluginNames();
+  cfg.plugins = cfg.plugins || {};
+  cfg.plugins.entries = cfg.plugins.entries || {};
+  for (const pluginName of pluginNames) {
+    cfg.plugins.entries[pluginName] = { enabled: true };
+    console.log(`[配置] 开启插件 ${pluginName}`);
   }
+
+  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
+  console.log(`✅ openclaw.json 成功写入 ${builtInAgents.length} 个内置 Agent 的配置保障！\n`);
 }
 
-async function initPersonas() {
-  console.log("🦞 初始化 OpenClaw 数字员工专属人设库...");
-  console.log("根状态目录: " + STATE_DIR + "\\n");
+function syncBuiltInFile(workspacePath, fileName, content, agentId) {
+  if (content === undefined) {
+    return;
+  }
 
-  for (const [agentId, soulContent] of Object.entries(AGENT_PERSONAS)) {
-    // 解析出对应的工作区路径，譬如 ~/.openclaw/workspace-coordinator
-    const workspacePath = path.join(STATE_DIR, "workspace-" + agentId);
-    const soulPath = path.join(workspacePath, "SOUL.md");
+  const targetPath = path.join(workspacePath, fileName);
+  fs.writeFileSync(targetPath, content, "utf8");
+  console.log(`[写入] ${agentId} 同步 ${fileName} -> ${targetPath}`);
+}
 
+async function initPersonas(builtInAgents) {
+  console.log("🦞 初始化 OpenClaw 内置 Agent 工作区...");
+  console.log("根状态目录: " + STATE_DIR);
+  console.log("工作区目录: " + WORKSPACE_ROOT + "\n");
+
+  for (const agent of builtInAgents) {
     try {
-      // 1. 确保目标工作区存在
-      if (!fs.existsSync(workspacePath)) {
-        fs.mkdirSync(workspacePath, { recursive: true });
-        console.log("[创建] " + agentId + " 专属工作区目录 -> " + workspacePath);
+      if (!fs.existsSync(agent.workspace)) {
+        fs.mkdirSync(agent.workspace, { recursive: true });
+        console.log("[创建] " + agent.id + " 专属工作区目录 -> " + agent.workspace);
       }
 
-      // 2. 覆盖或写入 SOUL.md 人设配置
-      fs.writeFileSync(soulPath, soulContent, "utf8");
-      console.log("[写入] " + agentId + " 成功注入人设灵魂 -> " + soulPath);
+      syncBuiltInFile(agent.workspace, "SOUL.md", agent.soul, agent.id);
+      syncBuiltInFile(agent.workspace, "IDENTITY.md", agent.identity, agent.id);
     } catch (err) {
-      console.error(`[失败] ${agentId} 初始化报错:`, err.message);
+      console.error(`[失败] ${agent.id} 初始化报错:`, err.message);
     }
   }
 
-  console.log(`\n✅ 所有底层数字员工的 SOUL.md 初始化及 openclaw.json 权限注入均已完毕！`);
-  console.log(`请确保您的 Gateway 后台监控已经重新加载配置！`);
+  console.log("\n✅ 所有内置 Agent 的工作区素材及 openclaw.json 权限注入均已完毕！");
+  console.log("请确保您的 Gateway 后台监控已经重新加载配置！");
 }
 
-/**
- * 重点：同步全局鉴权配置到各个隔离 Agent 的私有目录中
- * 这是解决 isolated agent 报 "No API key found" 的核心修复
- */
-async function syncAuthProfiles() {
+async function syncAuthProfiles(builtInAgents) {
   console.log("🔐 从 main agent 提取鉴权并同步到隔离 Agent 账户中...");
   const mainAuthPath = path.join(STATE_DIR, "agents", "main", "agent", "auth-profiles.json");
   if (!fs.existsSync(mainAuthPath)) {
     console.warn("⚠️ 未找到 main agent 的 auth-profiles.json，尝试 fallback 到 openclaw.json...");
-    // Fallback logic if main agent missing (already implemented previously)
     const configPath = path.join(STATE_DIR, "openclaw.json");
     if (!fs.existsSync(configPath)) {
       console.warn("⚠️ 未找到 openclaw.json，无法提取鉴权。");
       return;
     }
-    // ... (rest of the openclaw.json fallback if needed, but primary is main agent)
   }
 
-  for (const agent of AGENT_CONFIGS) {
-    if (agent.id === 'main') continue; // skip main itself
+  for (const agent of builtInAgents) {
+    if (agent.id === "main") {
+      continue;
+    }
 
     const agentDir = path.join(STATE_DIR, "agents", agent.id, "agent");
     const agentAuthPath = path.join(agentDir, "auth-profiles.json");
@@ -190,28 +213,52 @@ async function syncAuthProfiles() {
 async function syncPlugins() {
   console.log("📦 同步本地插件到工作区 plugins 目录...");
   const pluginsDestDir = path.join(STATE_DIR, "plugins");
-  const archivesAccessSrc = path.join(EXTENSIONS_DIR, "archives-access");
-  const archivesAccessDest = path.join(pluginsDestDir, "archives-access");
 
   try {
-    if (fs.existsSync(archivesAccessSrc)) {
-      if (!fs.existsSync(pluginsDestDir)) {
-        fs.mkdirSync(pluginsDestDir, { recursive: true });
-      }
-      fs.cpSync(archivesAccessSrc, archivesAccessDest, { recursive: true });
-      console.log(`[复制] 成功将 archives-access 插件复制到 -> ${archivesAccessDest}`);
-    } else {
-      console.warn(`⚠️ 未找到源插件目录: ${archivesAccessSrc}，请确认路径`);
+    if (!fs.existsSync(EXTENSIONS_DIR) || !fs.statSync(EXTENSIONS_DIR).isDirectory()) {
+      console.warn(`⚠️ 未找到源插件目录: ${EXTENSIONS_DIR}，跳过插件同步`);
+      return;
+    }
+
+    const pluginDirs = fs.readdirSync(EXTENSIONS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory());
+
+    if (pluginDirs.length === 0) {
+      console.warn(`⚠️ 源插件目录为空: ${EXTENSIONS_DIR}，跳过插件同步`);
+      return;
+    }
+
+    if (!fs.existsSync(pluginsDestDir)) {
+      fs.mkdirSync(pluginsDestDir, { recursive: true });
+    }
+
+    for (const pluginDir of pluginDirs) {
+      const pluginSrc = path.join(EXTENSIONS_DIR, pluginDir.name);
+      const pluginDest = path.join(pluginsDestDir, pluginDir.name);
+      fs.cpSync(pluginSrc, pluginDest, { recursive: true });
+      console.log(`[复制] 成功将 ${pluginDir.name} 插件复制到 -> ${pluginDest}`);
     }
   } catch (err) {
-    console.error(`[失败] 插件复制报错:`, err.message);
+    console.error("[失败] 插件复制报错:", err.message);
   }
 }
 
+function loadLocalPluginNames() {
+  if (!fs.existsSync(EXTENSIONS_DIR) || !fs.statSync(EXTENSIONS_DIR).isDirectory()) {
+    console.warn(`⚠️ 未找到源插件目录: ${EXTENSIONS_DIR}，跳过插件启用`);
+    return [];
+  }
+
+  return fs.readdirSync(EXTENSIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
 async function main() {
-  await initOpenClawConfig();
-  await syncAuthProfiles();
-  await initPersonas();
+  const builtInAgents = loadBuiltInAgents();
+  await initOpenClawConfig(builtInAgents);
+  await syncAuthProfiles(builtInAgents);
+  await initPersonas(builtInAgents);
   await syncPlugins();
 }
 

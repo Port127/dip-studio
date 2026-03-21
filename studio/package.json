@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/server.ts",
+    "init:agents": "node scripts/init_agents/index.mjs",
     "start": "node dist/server.js",
     "test": "vitest run --coverage",
     "test:watch": "vitest"
