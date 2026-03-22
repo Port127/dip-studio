@@ -711,7 +711,11 @@ describe("DefaultDigitalHumanLogic lifecycle (filesystem + adapter)", () => {
       }>;
     };
     const accId = normalizeOpenClawAccountIdFromAppId("a");
-    expect(patch.channels.feishu.accounts[accId].appId).toBe("a");
+    expect(patch.channels.feishu.accounts[accId]).toMatchObject({
+      appId: "a",
+      dmPolicy: "open",
+      allowFrom: ["*"]
+    });
     expect(patch.bindings.some((b) => b.agentId === result.id)).toBe(true);
     expect(
       patch.bindings.find((b) => b.agentId === result.id)?.match.channel
@@ -765,7 +769,11 @@ describe("DefaultDigitalHumanLogic lifecycle (filesystem + adapter)", () => {
       };
     };
     const accX = normalizeOpenClawAccountIdFromAppId("x");
-    expect(patch.channels.feishu.accounts[accX].appId).toBe("x");
+    expect(patch.channels.feishu.accounts[accX]).toMatchObject({
+      appId: "x",
+      dmPolicy: "open",
+      allowFrom: ["*"]
+    });
     const raw = (patchConfig.mock.calls[0][0] as { raw: string }).raw;
     expect(raw).toContain(result.id);
 
@@ -1102,7 +1110,11 @@ describe("DefaultDigitalHumanLogic lifecycle (filesystem + adapter)", () => {
       bindings: Array<{ agentId: string }>;
     };
     const accFb = normalizeOpenClawAccountIdFromAppId("fb");
-    expect(parsed.channels.feishu.accounts[accFb].appId).toBe("fb");
+    expect(parsed.channels.feishu.accounts[accFb]).toMatchObject({
+      appId: "fb",
+      dmPolicy: "open",
+      allowFrom: ["*"]
+    });
     expect(parsed.bindings.some((b) => b.agentId === result.id)).toBe(true);
 
     warnSpy.mockRestore();

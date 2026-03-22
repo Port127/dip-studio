@@ -371,8 +371,10 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
    * Binds channel credentials and routing: Feishu and DingTalk use
    * `channels.<feishu|dingtalk>.accounts.<accountId>` (derived from `appId`) and
    * `match.accountId` so multiple apps can coexist; each account may only be bound to one
-   * agent (other agents' claims on that account are removed). Tries `config.patch` first;
-   * falls back to writing `openclaw.json` if the gateway rejects the patch.
+   * agent (other agents' claims on that account are removed). For Feishu, each account
+   * also sets `dmPolicy: "open"` and `allowFrom: ["*"]` so DMs reach the agent without
+   * OpenClaw pairing (`openclaw pairing approve`). Tries `config.patch` first; falls back
+   * to writing `openclaw.json` if the gateway rejects the patch.
    *
    * @param agentId The OpenClaw agent id.
    * @param channel The channel configuration.
@@ -602,10 +604,24 @@ function applyAgentChannelBinding(
       ? { ...(prevBlock.accounts as Record<string, unknown>) }
       : {};
 
+  const prevEntry =
+    typeof prevAccounts[accountId] === "object" && prevAccounts[accountId] !== null
+      ? (prevAccounts[accountId] as Record<string, unknown>)
+      : {};
+
   prevAccounts[accountId] = {
+    ...prevEntry,
     enabled: true,
     appId: channel.appId.trim(),
-    appSecret: channel.appSecret
+    appSecret: channel.appSecret,
+    // OpenClaw Feishu default is dmPolicy=pairing (requires `openclaw pairing approve`).
+    // Digital employees should talk to the agent without manual pairing.
+    ...(channelKey === "feishu"
+      ? {
+          dmPolicy: "open",
+          allowFrom: ["*"]
+        }
+      : {})
   };
 
   currentConfig.bindings = [
