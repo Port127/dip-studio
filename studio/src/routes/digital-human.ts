@@ -5,7 +5,11 @@ import {
 } from "../adapters/openclaw-agents-adapter";
 import { getEnv } from "../config/env";
 import { HttpError } from "../errors/http-error";
+import {
+  DefaultOpenClawAgentSkillsHttpClient
+} from "../infra/openclaw-agent-skills-http-client";
 import { OpenClawGatewayClient } from "../infra/openclaw-gateway-client";
+import { DefaultAgentSkillsLogic } from "../logic/agent-skills";
 import {
   DefaultDigitalHumanLogic,
 } from "../logic/digital-human";
@@ -26,7 +30,14 @@ const digitalHumanLogic = new DefaultDigitalHumanLogic({
       timeoutMs: env.openClawGatewayTimeoutMs
     })
   ),
-  skillStorePath: env.openClawSkillStorePath
+  skillStorePath: env.openClawSkillStorePath,
+  agentSkillsLogic: new DefaultAgentSkillsLogic(
+    new DefaultOpenClawAgentSkillsHttpClient({
+      gatewayUrl: env.openClawGatewayHttpUrl,
+      token: env.openClawGatewayToken,
+      timeoutMs: env.openClawGatewayTimeoutMs
+    })
+  )
 });
 
 /**
@@ -219,6 +230,27 @@ export function createDigitalHumanRouter(): Router {
   );
 
   router.get(
+    "/api/dip-studio/v1/skills",
+    async (
+      _request: Request,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const result = await digitalHumanLogic.listEnabledSkills();
+
+        response.status(200).json(result);
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to query enabled skills")
+        );
+      }
+    }
+  );
+
+  router.get(
     "/api/dip-studio/v1/digital-human/:id",
     async (
       request: Request,
@@ -235,6 +267,28 @@ export function createDigitalHumanRouter(): Router {
           error instanceof HttpError
             ? error
             : new HttpError(502, "Failed to retrieve digital human detail")
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/dip-studio/v1/digital-human/:id/skills",
+    async (
+      request: Request,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const id = resolveIdParam(request.params.id);
+        const result = await digitalHumanLogic.listDigitalHumanSkills(id);
+
+        response.status(200).json(result);
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to query digital human skills")
         );
       }
     }

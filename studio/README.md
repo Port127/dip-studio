@@ -41,6 +41,17 @@ openssl pkey -in private.pem -pubout -out public.pem
 | [\].name | string | 数字员工名称 |
 | [\].avatar | string | 数字员工头像，可选 |
 
+#### 获取全局启用技能列表
+
+`GET /api/dip-studio/v1/skills`
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| [\].name | string | 技能名称 |
+| [\].description | string | 技能描述，可选 |
+
 #### 创建数字员工
 
 `POST /api/dip-studio/v1/digital-human`
@@ -61,6 +72,23 @@ openssl pkey -in private.pem -pubout -out public.pem
 | 参数 | 类型 | 说明 |
 | -- | -- | -- |
 | id | string | 数字员工 ID |
+
+#### 获取指定数字员工已配置技能列表
+
+`GET /api/dip-studio/v1/digital-human/{id}/skills`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 数字员工 ID |
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| [\].name | string | 技能名称 |
+| [\].description | string | 技能描述，可选 |
 
 #### 进行数字员工对话
 

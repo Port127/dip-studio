@@ -439,7 +439,12 @@ export function parseCronRunStatus(
     return "all";
   }
 
-  return parseQueryEnum(rawValue, "all", ["all", "ok", "error", "skipped"], "status");
+  return parseQueryEnum<CronRunStatus>(
+    rawValue,
+    "all",
+    ["all", "ok", "error", "skipped"],
+    "status"
+  );
 }
 
 /**
@@ -467,7 +472,7 @@ export function parseCronRunDeliveryStatus(
     return undefined;
   }
 
-  return parseQueryEnum(
+  return parseQueryEnum<CronRunDeliveryStatus>(
     rawValue,
     "unknown",
     ["delivered", "not-delivered", "unknown", "not-requested"],

@@ -10,19 +10,23 @@ import {
   listLinkedSkillNames,
   syncSkillsToWorkspace
 } from "../infra/skill-linker";
+import type { AgentSkillsLogic } from "./agent-skills";
 import type {
   ChannelConfig,
   CreateDigitalHumanRequest,
   CreateDigitalHumanResult,
   DigitalHumanChannelType,
   DigitalHumanDetail,
+  DigitalHumanAgentSkillList,
   DigitalHumanList,
+  DigitalHumanSkillList,
   DigitalHumanTemplate,
   UpdateDigitalHumanRequest,
   UpdateDigitalHumanResult
 } from "../types/digital-human";
 import type {
-  OpenClawAgentsListResult
+  OpenClawAgentsListResult,
+  OpenClawSkillStatusEntry
 } from "../types/openclaw";
 import {
   buildTemplate,
@@ -52,6 +56,21 @@ export interface DigitalHumanLogic {
    * @returns The detail payload (flat fields, no nested template).
    */
   getDigitalHuman(id: string): Promise<DigitalHumanDetail>;
+
+  /**
+   * Lists all globally enabled skills.
+   *
+   * @returns The global enabled skill list.
+   */
+  listEnabledSkills(): Promise<DigitalHumanSkillList>;
+
+  /**
+   * Lists skills available to one digital human and marks its enabled state.
+   *
+   * @param id The digital human identifier.
+   * @returns The merged skill list.
+   */
+  listDigitalHumanSkills(id: string): Promise<DigitalHumanAgentSkillList>;
 
   /**
    * Creates a new digital human with the full setup flow:
@@ -95,6 +114,11 @@ export interface DigitalHumanLogicOptions {
    * Absolute path to the central skill store directory.
    */
   skillStorePath: string;
+
+  /**
+   * Logic used to read agent skill bindings from the skills-control plugin.
+   */
+  agentSkillsLogic?: AgentSkillsLogic;
 }
 
 /**
@@ -103,6 +127,7 @@ export interface DigitalHumanLogicOptions {
 export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
   private readonly openClawAgentsAdapter: OpenClawAgentsAdapter;
   private readonly skillStorePath: string;
+  private readonly agentSkillsLogic?: AgentSkillsLogic;
 
   /**
    * Creates the digital human logic.
@@ -112,6 +137,7 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
   public constructor(options: DigitalHumanLogicOptions) {
     this.openClawAgentsAdapter = options.openClawAgentsAdapter;
     this.skillStorePath = options.skillStorePath;
+    this.agentSkillsLogic = options.agentSkillsLogic;
   }
 
   /**
@@ -200,6 +226,43 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
       skills,
       ...(channel !== undefined ? { channel } : {})
     };
+  }
+
+  /**
+   * Lists globally enabled skills returned by OpenClaw.
+   *
+   * @returns The global enabled skill list.
+   */
+  public async listEnabledSkills(): Promise<DigitalHumanSkillList> {
+    const globalEntries = await this.openClawAgentsAdapter.getSkillStatuses();
+
+    return mapAvailableSkillEntries(globalEntries).map((entry) => ({
+      name: getSkillEntryName(entry) ?? entry.skillKey,
+      description: getSkillEntryDescription(entry)
+    }));
+  }
+
+  /**
+   * Lists skills for one digital human by merging global enabled skills and
+   * the agent-specific enabled skill set.
+   *
+   * @param id The digital human identifier.
+   * @returns The merged skill list.
+   */
+  public async listDigitalHumanSkills(id: string): Promise<DigitalHumanAgentSkillList> {
+    const globalEntries = await this.openClawAgentsAdapter.getSkillStatuses();
+    const availableEntries = mapAvailableSkillEntries(globalEntries);
+
+    if (this.agentSkillsLogic === undefined) {
+      return availableEntries.map((entry) => ({
+        name: getSkillEntryName(entry) ?? entry.skillKey,
+        description: getSkillEntryDescription(entry)
+      }));
+    }
+
+    const agentBinding = await this.agentSkillsLogic.getAgentSkills(id);
+
+    return filterAgentSkillEntries(availableEntries, agentBinding.skills);
   }
 
   /**
@@ -424,24 +487,6 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
 }
 
 /**
- * Maps the OpenClaw agents payload to the public digital human schema.
- * Does not load IDENTITY.md; `creature` is always omitted. Prefer
- * {@link DefaultDigitalHumanLogic.listDigitalHumans} for full list data.
- *
- * @param result The OpenClaw agents list result.
- * @returns The normalized digital human list.
- */
-export function mapAgentsToDigitalHumans(
-  result: OpenClawAgentsListResult
-): DigitalHumanList {
-  return result.agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name ?? agent.identity?.name ?? agent.id,
-    creature: undefined
-  }));
-}
-
-/**
  * Resolves an isolated workspace directory for a given UUID.
  *
  * Uses the UUID as the workspace subdirectory name per the design doc.
@@ -451,6 +496,93 @@ export function mapAgentsToDigitalHumans(
  */
 export function resolveDefaultWorkspace(uuid: string): string {
   return join(homedir(), ".openclaw", uuid);
+}
+
+/**
+ * Maps a skill status entry to its normalized name.
+ *
+ * @param entry The normalized OpenClaw skill entry.
+ * @returns The trimmed skill name, or `undefined`.
+ */
+export function getSkillEntryName(
+  entry: OpenClawSkillStatusEntry
+): string | undefined {
+  const candidate = entry.name ?? entry.skillKey;
+
+  return candidate.trim().length > 0 ? candidate.trim() : undefined;
+}
+
+/**
+ * Extracts enabled skill names from a status entry list while preserving order.
+ *
+ * @param entries The OpenClaw skill status entries.
+ * @returns The ordered enabled skill names.
+ */
+export function mapAvailableSkillEntries(
+  entries: OpenClawSkillStatusEntry[]
+) : OpenClawSkillStatusEntry[] {
+  const availableEntries: OpenClawSkillStatusEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const name = getSkillEntryName(entry);
+
+    if (name === undefined || entry.enabled === false || seen.has(name)) {
+      continue;
+    }
+
+    seen.add(name);
+    availableEntries.push(entry);
+  }
+
+  return availableEntries;
+}
+
+/**
+ * Filters available skills to those configured on the target agent.
+ *
+ * @param availableEntries Available skills derived from global skill status.
+ * @param agentSkillNames Agent skill ids returned by the skills-control plugin.
+ * @returns The filtered skill list for the target agent.
+ */
+export function filterAgentSkillEntries(
+  availableEntries: OpenClawSkillStatusEntry[],
+  agentSkillNames: string[]
+) : DigitalHumanAgentSkillList {
+  const allowedNames = new Set(
+    agentSkillNames.map((name) => name.trim()).filter((name) => name.length > 0)
+  );
+
+  return availableEntries.flatMap((entry) => {
+    const name = getSkillEntryName(entry);
+
+    if (name === undefined || !allowedNames.has(name)) {
+      return [];
+    }
+
+    return [{
+      name,
+      description: getSkillEntryDescription(entry)
+    }];
+  });
+}
+
+/**
+ * Maps a skill status entry to its normalized description.
+ *
+ * @param entry The normalized OpenClaw skill entry.
+ * @returns The trimmed description, or `undefined`.
+ */
+export function getSkillEntryDescription(
+  entry: OpenClawSkillStatusEntry
+): string | undefined {
+  if (entry.description === undefined) {
+    return undefined;
+  }
+
+  const trimmed = entry.description.trim();
+
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 /**

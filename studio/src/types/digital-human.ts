@@ -24,6 +24,53 @@ export interface DigitalHuman {
 export type DigitalHumanList = DigitalHuman[];
 
 /**
+ * One globally available skill item.
+ */
+export interface DigitalHumanSkill {
+  /**
+   * Human-readable skill name / key.
+   */
+  name: string;
+
+  /**
+   * Human-readable description.
+   */
+  description?: string;
+}
+
+/**
+ * One skill item returned for a specific digital human.
+ */
+export interface DigitalHumanAgentSkill {
+  /**
+   * Human-readable skill name / key.
+   */
+  name: string;
+
+  /**
+   * Human-readable description.
+   */
+  description?: string;
+
+  /**
+   * Whether the target digital human currently enables this skill.
+   * This field is used internally by the backend merge logic and is not
+   * exposed by the public API schema for `/digital-human/{id}/skills`.
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Global skill list response returned by the skills query API.
+ */
+export type DigitalHumanSkillList = DigitalHumanSkill[];
+
+/**
+ * Agent skill list response returned by the digital human skill API.
+ */
+export type DigitalHumanAgentSkillList = DigitalHumanAgentSkill[];
+
+/**
  * Unified settings template for a digital employee.
  *
  * Acts as a bidirectional conversion hub between the Studio HTTP API

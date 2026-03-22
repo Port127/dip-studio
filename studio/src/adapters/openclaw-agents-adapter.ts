@@ -12,7 +12,9 @@ import type {
   OpenClawConfigPatchParams,
   OpenClawConfigPatchResult,
   OpenClawGatewayPort,
-  OpenClawRequestFrame
+  OpenClawRequestFrame,
+  OpenClawSkillStatusEntry,
+  OpenClawSkillsStatusParams
 } from "../types/openclaw";
 
 /**
@@ -59,6 +61,14 @@ export interface OpenClawAgentsAdapter {
   setAgentFile(params: OpenClawAgentsFilesSetParams): Promise<OpenClawAgentsFilesSetResult>;
 
   /**
+   * Reads skill status from OpenClaw. Omitting `agentId` queries global skills.
+   *
+   * @param params Optional scope parameters.
+   * @returns The normalized skill status list.
+   */
+  getSkillStatuses(params?: OpenClawSkillsStatusParams): Promise<OpenClawSkillStatusEntry[]>;
+
+  /**
    * Reads the current OpenClaw configuration.
    *
    * @returns The serialized config and its content hash.
@@ -77,15 +87,11 @@ export interface OpenClawAgentsAdapter {
 /**
  * Creates the OpenClaw `agents.list` request.
  *
- * @param requestId The frame correlation id.
  * @returns A serialized OpenClaw request frame.
  */
-export function createAgentsListRequest(
-  requestId: string
-): OpenClawRequestFrame {
+export function createAgentsListRequest(): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "agents.list",
     params: {}
   };
@@ -94,17 +100,14 @@ export function createAgentsListRequest(
 /**
  * Creates the OpenClaw `agents.create` request.
  *
- * @param requestId The frame correlation id.
  * @param params The agent creation parameters.
  * @returns A serialized OpenClaw request frame.
  */
 export function createAgentsCreateRequest(
-  requestId: string,
   params: OpenClawAgentsCreateParams
 ): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "agents.create",
     params
   };
@@ -113,17 +116,14 @@ export function createAgentsCreateRequest(
 /**
  * Creates the OpenClaw `agents.delete` request.
  *
- * @param requestId The frame correlation id.
  * @param params The agent deletion parameters.
  * @returns A serialized OpenClaw request frame.
  */
 export function createAgentsDeleteRequest(
-  requestId: string,
   params: OpenClawAgentsDeleteParams
 ): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "agents.delete",
     params
   };
@@ -132,17 +132,14 @@ export function createAgentsDeleteRequest(
 /**
  * Creates the OpenClaw `agents.files.get` request.
  *
- * @param requestId The frame correlation id.
  * @param params The file retrieval parameters.
  * @returns A serialized OpenClaw request frame.
  */
 export function createAgentsFilesGetRequest(
-  requestId: string,
   params: OpenClawAgentsFilesGetParams
 ): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "agents.files.get",
     params
   };
@@ -151,18 +148,31 @@ export function createAgentsFilesGetRequest(
 /**
  * Creates the OpenClaw `agents.files.set` request.
  *
- * @param requestId The frame correlation id.
  * @param params The file write parameters.
  * @returns A serialized OpenClaw request frame.
  */
 export function createAgentsFilesSetRequest(
-  requestId: string,
   params: OpenClawAgentsFilesSetParams
 ): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "agents.files.set",
+    params
+  };
+}
+
+/**
+ * Creates the OpenClaw `skills.status` request.
+ *
+ * @param params Optional skill status scope parameters.
+ * @returns A serialized OpenClaw request frame.
+ */
+export function createSkillsStatusRequest(
+  params: OpenClawSkillsStatusParams = {}
+): OpenClawRequestFrame {
+  return {
+    type: "req",
+    method: "skills.status",
     params
   };
 }
@@ -170,15 +180,11 @@ export function createAgentsFilesSetRequest(
 /**
  * Creates the OpenClaw `config.get` request.
  *
- * @param requestId The frame correlation id.
  * @returns A serialized OpenClaw request frame.
  */
-export function createConfigGetRequest(
-  requestId: string
-): OpenClawRequestFrame {
+export function createConfigGetRequest(): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "config.get",
     params: {}
   };
@@ -187,17 +193,14 @@ export function createConfigGetRequest(
 /**
  * Creates the OpenClaw `config.patch` request.
  *
- * @param requestId The frame correlation id.
  * @param params The config patch parameters.
  * @returns A serialized OpenClaw request frame.
  */
 export function createConfigPatchRequest(
-  requestId: string,
   params: OpenClawConfigPatchParams
 ): OpenClawRequestFrame {
   return {
     type: "req",
-    id: requestId,
     method: "config.patch",
     params
   };
@@ -221,7 +224,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
    */
   public async listAgents(): Promise<OpenClawAgentsListResult> {
     return this.gatewayPort.invoke<OpenClawAgentsListResult>(
-      createAgentsListRequest("agents.list")
+      createAgentsListRequest()
     );
   }
 
@@ -235,7 +238,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
     params: OpenClawAgentsCreateParams
   ): Promise<OpenClawAgentsCreateResult> {
     return this.gatewayPort.invoke<OpenClawAgentsCreateResult>(
-      createAgentsCreateRequest("agents.create", params)
+      createAgentsCreateRequest(params)
     );
   }
 
@@ -249,7 +252,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
     params: OpenClawAgentsDeleteParams
   ): Promise<OpenClawAgentsDeleteResult> {
     return this.gatewayPort.invoke<OpenClawAgentsDeleteResult>(
-      createAgentsDeleteRequest("agents.delete", params)
+      createAgentsDeleteRequest(params)
     );
   }
 
@@ -263,7 +266,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
     params: OpenClawAgentsFilesGetParams
   ): Promise<OpenClawAgentsFilesGetResult> {
     return this.gatewayPort.invoke<OpenClawAgentsFilesGetResult>(
-      createAgentsFilesGetRequest("agents.files.get", params)
+      createAgentsFilesGetRequest(params)
     );
   }
 
@@ -277,8 +280,24 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
     params: OpenClawAgentsFilesSetParams
   ): Promise<OpenClawAgentsFilesSetResult> {
     return this.gatewayPort.invoke<OpenClawAgentsFilesSetResult>(
-      createAgentsFilesSetRequest("agents.files.set", params)
+      createAgentsFilesSetRequest(params)
     );
+  }
+
+  /**
+   * Invokes `skills.status` over the gateway RPC port.
+   *
+   * @param params Optional scope parameters.
+   * @returns The normalized skill status list.
+   */
+  public async getSkillStatuses(
+    params: OpenClawSkillsStatusParams = {}
+  ): Promise<OpenClawSkillStatusEntry[]> {
+    const result = await this.gatewayPort.invoke<unknown>(
+      createSkillsStatusRequest(params)
+    );
+
+    return normalizeSkillStatusEntries(result);
   }
 
   /**
@@ -288,7 +307,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
    */
   public async getConfig(): Promise<OpenClawConfigGetResult> {
     return this.gatewayPort.invoke<OpenClawConfigGetResult>(
-      createConfigGetRequest("config.get")
+      createConfigGetRequest()
     );
   }
 
@@ -302,7 +321,152 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
     params: OpenClawConfigPatchParams
   ): Promise<OpenClawConfigPatchResult> {
     return this.gatewayPort.invoke<OpenClawConfigPatchResult>(
-      createConfigPatchRequest("config.patch", params)
+      createConfigPatchRequest(params)
     );
   }
+}
+
+/**
+ * Normalizes the loosely typed `skills.status` payload to a flat entry list.
+ *
+ * @param result The raw RPC payload.
+ * @returns The normalized skill status entries.
+ */
+export function normalizeSkillStatusEntries(
+  result: unknown
+): OpenClawSkillStatusEntry[] {
+  if (Array.isArray(result)) {
+    return result
+      .map((entry) => normalizeSkillStatusEntry(entry))
+      .filter((entry): entry is OpenClawSkillStatusEntry => entry !== undefined);
+  }
+
+  if (typeof result !== "object" || result === null) {
+    return [];
+  }
+
+  for (const collectionKey of ["skills", "entries", "items"]) {
+    const collection = (result as Record<string, unknown>)[collectionKey];
+
+    if (Array.isArray(collection)) {
+      return collection
+        .map((entry) => normalizeSkillStatusEntry(entry))
+        .filter((entry): entry is OpenClawSkillStatusEntry => entry !== undefined);
+    }
+  }
+
+  return Object.entries(result).flatMap(([skillKey, value]) => {
+    const normalized = normalizeSkillStatusEntry(value, skillKey);
+
+    return normalized === undefined ? [] : [normalized];
+  });
+}
+
+/**
+ * Normalizes one raw `skills.status` entry.
+ *
+ * @param candidate The raw status entry.
+ * @param fallbackKey The fallback skill key derived from object keys.
+ * @returns The normalized entry, or `undefined` when it cannot be parsed.
+ */
+export function normalizeSkillStatusEntry(
+  candidate: unknown,
+  fallbackKey?: string
+): OpenClawSkillStatusEntry | undefined {
+  if (typeof candidate === "boolean") {
+    if (fallbackKey === undefined) {
+      return undefined;
+    }
+
+    return {
+      skillKey: fallbackKey,
+      name: fallbackKey,
+      enabled: candidate
+    };
+  }
+
+  if (typeof candidate !== "object" || candidate === null) {
+    return fallbackKey === undefined
+      ? undefined
+      : {
+          skillKey: fallbackKey,
+          name: fallbackKey,
+          enabled: undefined
+        };
+  }
+
+  const raw = candidate as Record<string, unknown>;
+  const skillKey = readFirstString(raw.skillKey, raw.key, raw.id, fallbackKey);
+
+  if (skillKey === undefined) {
+    return undefined;
+  }
+
+  return {
+    skillKey,
+    name: readFirstString(raw.name, raw.skillName, raw.skill, skillKey),
+    description: readFirstString(
+      raw.description,
+      raw.desc,
+      raw.summary,
+      raw.prompt
+    ),
+    enabled: readEnabledFlag(raw)
+  };
+}
+
+/**
+ * Reads the first non-empty string from a candidate list.
+ *
+ * @param values Raw candidate values.
+ * @returns The first trimmed string, or `undefined`.
+ */
+function readFirstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Derives one normalized enabled flag from a raw skill status entry.
+ *
+ * @param candidate The raw skill status object.
+ * @returns The normalized enabled flag, or `undefined`.
+ */
+function readEnabledFlag(candidate: Record<string, unknown>): boolean | undefined {
+  for (const key of ["enabled", "isEnabled", "active"]) {
+    const value = candidate[key];
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  if (typeof candidate.disabled === "boolean") {
+    return candidate.disabled !== true;
+  }
+
+  for (const key of ["status", "state"]) {
+    const value = candidate[key];
+
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    const normalized = value.trim().toLowerCase();
+
+    if (["enabled", "enable", "active", "on"].includes(normalized)) {
+      return true;
+    }
+
+    if (["disabled", "disable", "inactive", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return undefined;
 }

@@ -10,6 +10,30 @@ servers:
   - url: /api/dip-studio/v1
   
 paths:
+  /skills:
+    get:
+      operationId: getEnabledSkills
+      summary: 获取全局启用技能列表
+      responses:
+        "200":
+          description: 全局启用技能列表
+          content:
+            application/json:
+              schema:
+                $ref: './digital-human.schemas.yaml#/components/schemas/DigitalHumanSkillList'
+        "400":
+          $ref: '../common.schemas.yaml#/errors/InvalidParameter'
+        "401":
+          $ref: '../common.schemas.yaml#/errors/Unauthorized'
+        "403":
+          $ref: '../common.schemas.yaml#/errors/Forbidden'
+        "404":
+          $ref: '../common.schemas.yaml#/errors/NotFound'
+        "502":
+          $ref: '../common.schemas.yaml#/errors/BadGateway'
+        "500":
+          $ref: '../common.schemas.yaml#/errors/InternalServerError'
+
   /digital-human:
     get:
       operationId: getDigitalHumanList
@@ -149,6 +173,37 @@ paths:
       responses:
         "204":
           description: 删除成功，无响应体
+        "400":
+          $ref: '../common.schemas.yaml#/errors/InvalidParameter'
+        "401":
+          $ref: '../common.schemas.yaml#/errors/Unauthorized'
+        "403":
+          $ref: '../common.schemas.yaml#/errors/Forbidden'
+        "404":
+          $ref: '../common.schemas.yaml#/errors/NotFound'
+        "502":
+          $ref: '../common.schemas.yaml#/errors/BadGateway'
+        "500":
+          $ref: '../common.schemas.yaml#/errors/InternalServerError'
+
+  /digital-human/{id}/skills:
+    get:
+      operationId: getDigitalHumanSkills
+      summary: 获取指定数字员工已配置技能列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 数字员工 ID（与 OpenClaw agent id 一致）
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 已配置技能列表
+          content:
+            application/json:
+              schema:
+                $ref: './digital-human.schemas.yaml#/components/schemas/DigitalHumanAgentSkillList'
         "400":
           $ref: '../common.schemas.yaml#/errors/InvalidParameter'
         "401":

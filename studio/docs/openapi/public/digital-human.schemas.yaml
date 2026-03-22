@@ -60,6 +60,44 @@ components:
         - id
         - name
 
+    DigitalHumanSkill:
+      summary: 技能启用状态
+      type: object
+      properties:
+        name:
+          type: string
+          title: 技能名称
+        description:
+          type: string
+          title: 技能描述
+      required:
+        - name
+
+    DigitalHumanAgentSkill:
+      summary: 数字员工技能状态
+      type: object
+      properties:
+        name:
+          type: string
+          title: 技能名称
+        description:
+          type: string
+          title: 技能描述
+      required:
+        - name
+
+    DigitalHumanSkillList:
+      summary: 技能列表
+      type: array
+      items:
+        $ref: '#/components/schemas/DigitalHumanSkill'
+
+    DigitalHumanAgentSkillList:
+      summary: 数字员工技能列表
+      type: array
+      items:
+        $ref: '#/components/schemas/DigitalHumanAgentSkill'
+
     DigitalHumanDetail:
       summary: 数字员工详情
       type: object

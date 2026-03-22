@@ -7,15 +7,16 @@ import {
   createAgentsFilesSetRequest,
   createConfigGetRequest,
   createConfigPatchRequest,
+  createSkillsStatusRequest,
+  normalizeSkillStatusEntries,
   OpenClawAgentsGatewayAdapter,
   createAgentsListRequest
 } from "./openclaw-agents-adapter";
 
 describe("createAgentsListRequest", () => {
   it("builds the agents.list JSON RPC frame", () => {
-    expect(createAgentsListRequest("req-2")).toEqual({
+    expect(createAgentsListRequest()).toEqual({
       type: "req",
-      id: "req-2",
       method: "agents.list",
       params: {}
     });
@@ -25,13 +26,12 @@ describe("createAgentsListRequest", () => {
 describe("createAgentsCreateRequest", () => {
   it("builds the agents.create JSON RPC frame", () => {
     expect(
-      createAgentsCreateRequest("req-4", {
+      createAgentsCreateRequest({
         name: "Main Agent",
         workspace: "/path/to/main"
       })
     ).toEqual({
       type: "req",
-      id: "req-4",
       method: "agents.create",
       params: {
         name: "Main Agent",
@@ -103,7 +103,7 @@ describe("OpenClawAgentsGatewayAdapter", () => {
 
     expect(gatewayPort.invoke).toHaveBeenNthCalledWith(
       1,
-      createAgentsCreateRequest("agents.create", {
+      createAgentsCreateRequest({
         name: "Main Agent",
         workspace: "/path/to/main"
       })
@@ -119,7 +119,7 @@ describe("OpenClawAgentsGatewayAdapter", () => {
     await adapter.deleteAgent({ agentId: "x", deleteFiles: true });
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
-      createAgentsDeleteRequest("agents.delete", {
+      createAgentsDeleteRequest({
         agentId: "x",
         deleteFiles: true
       })
@@ -137,7 +137,7 @@ describe("OpenClawAgentsGatewayAdapter", () => {
     await adapter.getAgentFile({ agentId: "a", name: "IDENTITY.md" });
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
-      createAgentsFilesGetRequest("agents.files.get", {
+      createAgentsFilesGetRequest({
         agentId: "a",
         name: "IDENTITY.md"
       })
@@ -157,11 +157,58 @@ describe("OpenClawAgentsGatewayAdapter", () => {
     });
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
-      createAgentsFilesSetRequest("agents.files.set", {
+      createAgentsFilesSetRequest({
         agentId: "a",
         name: "SOUL.md",
         content: "body"
       })
+    );
+  });
+
+  it("delegates skills.status without agentId to the gateway port", async () => {
+    const gatewayPort = {
+      invoke: vi.fn().mockResolvedValue({
+        skills: [
+          {
+            skillKey: "planner",
+            enabled: true
+          }
+        ]
+      })
+    };
+    const adapter = new OpenClawAgentsGatewayAdapter(gatewayPort);
+
+    await expect(adapter.getSkillStatuses()).resolves.toEqual([
+      {
+        skillKey: "planner",
+        name: "planner",
+        description: undefined,
+        enabled: true
+      }
+    ]);
+
+    expect(gatewayPort.invoke).toHaveBeenCalledWith(
+      createSkillsStatusRequest({})
+    );
+  });
+
+  it("delegates skills.status with agentId to the gateway port", async () => {
+    const gatewayPort = {
+      invoke: vi.fn().mockResolvedValue({
+        skills: [
+          {
+            skillKey: "planner",
+            enabled: true
+          }
+        ]
+      })
+    };
+    const adapter = new OpenClawAgentsGatewayAdapter(gatewayPort);
+
+    await adapter.getSkillStatuses({ agentId: "a1" });
+
+    expect(gatewayPort.invoke).toHaveBeenCalledWith(
+      createSkillsStatusRequest({ agentId: "a1" })
     );
   });
 
@@ -174,7 +221,7 @@ describe("OpenClawAgentsGatewayAdapter", () => {
     await adapter.getConfig();
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
-      createConfigGetRequest("config.get")
+      createConfigGetRequest()
     );
   });
 
@@ -187,10 +234,87 @@ describe("OpenClawAgentsGatewayAdapter", () => {
     await adapter.patchConfig({ raw: "{}", baseHash: "h" });
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
-      createConfigPatchRequest("config.patch", {
+      createConfigPatchRequest({
         raw: "{}",
         baseHash: "h"
       })
     );
+  });
+});
+
+describe("createSkillsStatusRequest", () => {
+  it("builds the skills.status JSON RPC frame", () => {
+    expect(createSkillsStatusRequest({ agentId: "a1" })).toEqual({
+      type: "req",
+      method: "skills.status",
+      params: {
+        agentId: "a1"
+      }
+    });
+  });
+
+  it("supports querying global skills without agentId", () => {
+    expect(createSkillsStatusRequest()).toEqual({
+      type: "req",
+      method: "skills.status",
+      params: {}
+    });
+  });
+});
+
+describe("normalizeSkillStatusEntries", () => {
+  it("normalizes array payloads", () => {
+    expect(
+      normalizeSkillStatusEntries([
+        {
+          skillKey: "planner",
+          name: "planner",
+          description: undefined,
+          enabled: true
+        },
+        {
+          key: "writer",
+          desc: "writer skill",
+          disabled: false
+        }
+      ])
+    ).toEqual([
+      {
+        skillKey: "planner",
+        name: "planner",
+        description: undefined,
+        enabled: true
+      },
+      {
+        skillKey: "writer",
+        name: "writer",
+        description: "writer skill",
+        enabled: true
+      }
+    ]);
+  });
+
+  it("normalizes keyed object payloads", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        planner: {
+          enabled: true
+        },
+        writer: false
+      })
+    ).toEqual([
+      {
+        skillKey: "planner",
+        name: "planner",
+        description: undefined,
+        enabled: true
+      },
+      {
+        skillKey: "writer",
+        name: "writer",
+        description: undefined,
+        enabled: false
+      }
+    ]);
   });
 });
