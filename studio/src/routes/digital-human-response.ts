@@ -41,6 +41,7 @@ export function createDigitalHumanResponseRouter(
       try {
         const requestBody = readDigitalHumanResponseRequestBody(request.body);
         const requestHeaders = readDigitalHumanResponseRequestHeaders(request.headers);
+        const sessionKey = requestHeaders?.get("x-openclaw-session-key");
         const upstreamResponse = await responsesHttpClient.createResponseStream(
           request.params.id,
           requestBody,
@@ -48,6 +49,9 @@ export function createDigitalHumanResponseRouter(
           requestHeaders
         );
 
+        if (sessionKey !== null && sessionKey !== undefined) {
+          response.setHeader("x-openclaw-session-key", sessionKey);
+        }
         writeEventStreamHeaders(response, upstreamResponse.status, upstreamResponse.headers);
         await pipeEventStream(upstreamResponse.body, response);
       } catch (error) {
@@ -126,12 +130,19 @@ export function readDigitalHumanResponseRequestHeaders(
     return undefined;
   }
 
-  const sessionKey = readOptionalHeaderValue(
+  const existingSessionKey = readOptionalHeaderValue(
     requestHeaders["x-openclaw-session-key"]
   );
+  const userId = readOptionalHeaderValue(requestHeaders["x-user-id"]);
+  const sessionKey =
+    existingSessionKey ??
+    (userId === undefined ? undefined : buildOpenClawSessionKey(userId));
 
   if (sessionKey === undefined) {
-    return undefined;
+    throw new HttpError(
+      401,
+      "x-user-id header is required when x-openclaw-session-key is absent"
+    );
   }
 
   return new Headers({
@@ -157,6 +168,20 @@ export function readOptionalHeaderValue(
   }
 
   return headerValue;
+}
+
+/**
+ * Builds the default OpenClaw session key for a new user chat session.
+ *
+ * @param userId The authenticated user id.
+ * @param chatId Optional deterministic chat id used by tests.
+ * @returns The normalized OpenClaw session key.
+ */
+export function buildOpenClawSessionKey(
+  userId: string,
+  chatId: string = globalThis.crypto.randomUUID()
+): string {
+  return `user:${userId}:direct:${chatId}`;
 }
 
 /**

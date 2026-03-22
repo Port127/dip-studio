@@ -26,6 +26,8 @@ openssl pkey -in private.pem -pubout -out public.pem
 
 ## API
 
+除白名单接口外，所有接口都需要在请求头中携带 `Authorization: Bearer <access-token>`。服务端会通过 Hydra `/admin/oauth2/introspect` 做令牌内省；在 `NODE_ENV=development` 时，会跳过 Hydra，改为使用 `.env` 中的 `OAUTH_MOCK_USER_ID` 作为鉴权用户。
+
 ### 数字员工
 
 公开接口基础路径：`/api/dip-studio/v1`
@@ -148,6 +150,7 @@ openssl pkey -in private.pem -pubout -out public.pem
 
 | 参数 | 类型 | 是否必填 | 说明 |
 | -- | -- | -- | -- |
+| Authorization | string | 是 | `Bearer <access-token>`，用于 Hydra 内省鉴权 |
 | x-openclaw-session-key | string | 否 | 透传到 OpenClaw `/v1/responses` 的会话键 |
 
 请求：`application/json`
@@ -157,3 +160,4 @@ openssl pkey -in private.pem -pubout -out public.pem
 响应：`200 text/event-stream`
 
 返回数字员工响应事件流，响应体为 SSE 流。
+当请求未传入 `x-openclaw-session-key` 时，服务端会根据内省得到的 `x-user-id` 自动生成 `user:<userid>:direct:<chatId>`，并在响应头返回同名 `x-openclaw-session-key`。
