@@ -99,6 +99,12 @@ openssl pkey -in private.pem -pubout -out public.pem
 | -- | -- | -- | -- |
 | id | string | 是 | 数字员工 ID |
 
+请求头：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| x-openclaw-session-key | string | 否 | 透传到 OpenClaw `/v1/responses` 的会话键 |
+
 请求：`application/json`
 
 请求体为透传对象，支持任意 JSON 字段。

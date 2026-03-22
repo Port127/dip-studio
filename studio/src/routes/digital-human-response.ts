@@ -1,4 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
+import type { IncomingHttpHeaders } from "node:http";
 
 import { getEnv } from "../config/env";
 import { HttpError } from "../errors/http-error";
@@ -39,10 +40,12 @@ export function createDigitalHumanResponseRouter(
 
       try {
         const requestBody = readDigitalHumanResponseRequestBody(request.body);
+        const requestHeaders = readDigitalHumanResponseRequestHeaders(request.headers);
         const upstreamResponse = await responsesHttpClient.createResponseStream(
           request.params.id,
           requestBody,
-          abortController.signal
+          abortController.signal,
+          requestHeaders
         );
 
         writeEventStreamHeaders(response, upstreamResponse.status, upstreamResponse.headers);
@@ -108,6 +111,52 @@ export function readDigitalHumanResponseRequestBody(
   }
 
   return requestBody as DigitalHumanResponseRequest;
+}
+
+/**
+ * Extracts supported upstream request headers from the downstream HTTP request.
+ *
+ * @param requestHeaders The raw downstream request headers.
+ * @returns The filtered headers forwarded to OpenClaw.
+ */
+export function readDigitalHumanResponseRequestHeaders(
+  requestHeaders?: IncomingHttpHeaders
+): Headers | undefined {
+  if (requestHeaders === undefined) {
+    return undefined;
+  }
+
+  const sessionKey = readOptionalHeaderValue(
+    requestHeaders["x-openclaw-session-key"]
+  );
+
+  if (sessionKey === undefined) {
+    return undefined;
+  }
+
+  return new Headers({
+    "x-openclaw-session-key": sessionKey
+  });
+}
+
+/**
+ * Normalizes a possibly repeated HTTP header value to a single string.
+ *
+ * @param headerValue The raw Node.js header value.
+ * @returns The normalized header value when present.
+ */
+export function readOptionalHeaderValue(
+  headerValue: string | string[] | undefined
+): string | undefined {
+  if (headerValue === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(headerValue)) {
+    return headerValue[0];
+  }
+
+  return headerValue;
 }
 
 /**

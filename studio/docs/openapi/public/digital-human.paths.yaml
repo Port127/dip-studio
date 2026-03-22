@@ -228,6 +228,12 @@ paths:
           description: 数字员工 ID
           schema:
             type: string
+        - name: x-openclaw-session-key
+          in: header
+          required: false
+          description: 透传到 OpenClaw `/v1/responses` 的会话键
+          schema:
+            type: string
       requestBody:
         required: true
         content:

@@ -9,6 +9,16 @@ export interface DigitalHumanResponseRequest {
 }
 
 /**
+ * Describes the request headers accepted by the digital human response endpoint.
+ */
+export interface DigitalHumanResponseRequestHeaders {
+  /**
+   * Optional OpenClaw session key passed through to the upstream gateway.
+   */
+  "x-openclaw-session-key"?: string;
+}
+
+/**
  * Describes the payload forwarded to OpenClaw `/v1/responses`.
  */
 export interface OpenClawResponsesRequest extends DigitalHumanResponseRequest {

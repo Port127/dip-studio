@@ -7,6 +7,8 @@ import {
   createDigitalHumanResponseRouter,
   pipeEventStream,
   readDigitalHumanResponseRequestBody,
+  readDigitalHumanResponseRequestHeaders,
+  readOptionalHeaderValue,
   writeEventStreamHeaders
 } from "./digital-human-response";
 
@@ -55,6 +57,31 @@ describe("readDigitalHumanResponseRequestBody", () => {
     expect(() => readDigitalHumanResponseRequestBody([])).toThrow(
       "Digital human response request body must be a JSON object"
     );
+  });
+});
+
+describe("readOptionalHeaderValue", () => {
+  it("returns the first header value when the header is repeated", () => {
+    expect(readOptionalHeaderValue(["session-1", "session-2"])).toBe("session-1");
+    expect(readOptionalHeaderValue("session-1")).toBe("session-1");
+    expect(readOptionalHeaderValue(undefined)).toBeUndefined();
+  });
+});
+
+describe("readDigitalHumanResponseRequestHeaders", () => {
+  it("extracts x-openclaw-session-key only", () => {
+    const headers = readDigitalHumanResponseRequestHeaders({
+      "x-openclaw-session-key": "agent:demo:session-1",
+      "x-openclaw-extra": "ignored"
+    });
+
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers?.get("x-openclaw-session-key")).toBe("agent:demo:session-1");
+    expect(headers?.get("x-openclaw-extra")).toBeNull();
+  });
+
+  it("returns undefined when x-openclaw-session-key is absent", () => {
+    expect(readDigitalHumanResponseRequestHeaders({})).toBeUndefined();
   });
 });
 
@@ -218,19 +245,25 @@ describe("createDigitalHumanResponseRouter", () => {
       body: {
         input: "hello"
       },
+      headers: {
+        "x-openclaw-session-key": "agent:agent-1:session-1"
+      },
       on: vi.fn()
     } as unknown as Request;
 
     await handler?.(request, response, next);
 
     expect(createResponseStream).toHaveBeenCalledOnce();
-    expect(createResponseStream).toHaveBeenCalledWith(
-      "agent-1",
-      {
-        input: "hello"
-      },
-      expect.any(AbortSignal)
-    );
+    expect(createResponseStream.mock.calls[0]?.[0]).toBe("agent-1");
+    expect(createResponseStream.mock.calls[0]?.[1]).toEqual({
+      input: "hello"
+    });
+    expect(createResponseStream.mock.calls[0]?.[2]).toBeInstanceOf(AbortSignal);
+    expect(
+      (createResponseStream.mock.calls[0]?.[3] as Headers | undefined)?.get(
+        "x-openclaw-session-key"
+      )
+    ).toBe("agent:agent-1:session-1");
     expect(response.write).toHaveBeenCalledOnce();
     expect(response.end).toHaveBeenCalledOnce();
     expect(next).not.toHaveBeenCalled();
