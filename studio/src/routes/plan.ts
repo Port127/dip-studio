@@ -10,10 +10,13 @@ import type {
   CronListEnabledFilter,
   CronListSortBy,
   CronListSortDir,
+  DeleteCronJobCommand,
   OpenClawCronListResult,
   CronRunsSortDir,
   OpenClawCronListParams,
-  OpenClawCronRunsParams
+  OpenClawCronRunsParams,
+  UpdateCronJobCommand,
+  UpdatePlanRequest
 } from "../types/plan";
 
 /**
@@ -90,6 +93,16 @@ export interface DigitalHumanPlansParams {
  * Path parameters for plan runs endpoint.
  */
 export interface PlanRunsParams {
+  /**
+   * Plan identifier.
+   */
+  id: string;
+}
+
+/**
+ * Path parameters for plan mutation endpoints.
+ */
+export interface PlanParams {
   /**
    * Plan identifier.
    */
@@ -192,7 +205,103 @@ export function createCronRouter(logic: CronLogic = cronLogic): Router {
     }
   );
 
+  router.put(
+    "/api/dip-studio/v1/plans/:id",
+    async (
+      request: Request<PlanParams, unknown, unknown>,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const command: UpdateCronJobCommand = {
+          id: request.params.id,
+          patch: readUpdatePlanRequest(request.body),
+          userId: readAuthenticatedUserId(request)
+        };
+        const result = await logic.updateCronJob(command);
+
+        response.status(200).json(result);
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to update plan")
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/dip-studio/v1/plans/:id",
+    async (
+      request: Request<PlanParams, unknown, unknown>,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const command: DeleteCronJobCommand = {
+          id: request.params.id,
+          userId: readAuthenticatedUserId(request)
+        };
+
+        await logic.deleteCronJob(command);
+
+        response.status(204).send();
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to delete plan")
+        );
+      }
+    }
+  );
+
   return router;
+}
+
+/**
+ * Parses and validates one plan update request body.
+ *
+ * @param body The raw request body.
+ * @returns The validated update request payload.
+ * @throws {HttpError} Thrown when the body is invalid.
+ */
+export function readUpdatePlanRequest(body: unknown): UpdatePlanRequest {
+  const raw = typeof body === "object" && body !== null
+    ? body as Record<string, unknown>
+    : undefined;
+
+  if (raw === undefined) {
+    throw new HttpError(400, "Request body must be a JSON object");
+  }
+
+  const allowedKeys = ["name", "enabled"];
+  const keys = Object.keys(raw);
+
+  if (keys.length === 0 || keys.some((key) => !allowedKeys.includes(key))) {
+    throw new HttpError(400, "Request body must contain only `name` and/or `enabled`");
+  }
+
+  const updateRequest: UpdatePlanRequest = {};
+
+  if ("name" in raw) {
+    if (typeof raw.name !== "string" || raw.name.trim().length === 0) {
+      throw new HttpError(400, "name must be a non-empty string when provided");
+    }
+
+    updateRequest.name = raw.name.trim();
+  }
+
+  if ("enabled" in raw) {
+    if (typeof raw.enabled !== "boolean") {
+      throw new HttpError(400, "enabled must be a boolean when provided");
+    }
+
+    updateRequest.enabled = raw.enabled;
+  }
+
+  return updateRequest;
 }
 
 /**

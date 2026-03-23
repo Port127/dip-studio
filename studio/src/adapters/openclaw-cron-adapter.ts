@@ -5,8 +5,12 @@ import type {
 import type {
   OpenClawCronListParams,
   OpenClawCronListResult,
+  OpenClawCronRemoveParams,
+  OpenClawCronRemoveResult,
   OpenClawCronRunsParams,
-  OpenClawCronRunsResult
+  OpenClawCronRunsResult,
+  OpenClawCronUpdateParams,
+  OpenClawCronJob
 } from "../types/plan";
 
 /**
@@ -20,6 +24,22 @@ export interface OpenClawCronAdapter {
    * @returns The OpenClaw cron jobs list payload.
    */
   listCronJobs(params: OpenClawCronListParams): Promise<OpenClawCronListResult>;
+
+  /**
+   * Updates one cron job using OpenClaw `cron.update`.
+   *
+   * @param params Update parameters forwarded to OpenClaw.
+   * @returns The updated cron job payload.
+   */
+  updateCronJob(params: OpenClawCronUpdateParams): Promise<OpenClawCronJob>;
+
+  /**
+   * Removes one cron job using OpenClaw `cron.remove`.
+   *
+   * @param params Delete parameters forwarded to OpenClaw.
+   * @returns The remove result payload.
+   */
+  removeCronJob(params: OpenClawCronRemoveParams): Promise<OpenClawCronRemoveResult>;
 
   /**
    * Fetches cron run history using OpenClaw `cron.runs`.
@@ -74,6 +94,44 @@ export function createCronRunsRequest(
 }
 
 /**
+ * Creates the OpenClaw `cron.update` request.
+ *
+ * @param requestId The frame correlation id.
+ * @param params Update parameters forwarded to OpenClaw.
+ * @returns A serialized OpenClaw request frame.
+ */
+export function createCronUpdateRequest(
+  requestId: string,
+  params: OpenClawCronUpdateParams
+): OpenClawRequestFrame {
+  return {
+    type: "req",
+    id: requestId,
+    method: "cron.update",
+    params
+  };
+}
+
+/**
+ * Creates the OpenClaw `cron.remove` request.
+ *
+ * @param requestId The frame correlation id.
+ * @param params Delete parameters forwarded to OpenClaw.
+ * @returns A serialized OpenClaw request frame.
+ */
+export function createCronRemoveRequest(
+  requestId: string,
+  params: OpenClawCronRemoveParams
+): OpenClawRequestFrame {
+  return {
+    type: "req",
+    id: requestId,
+    method: "cron.remove",
+    params
+  };
+}
+
+/**
  * Adapter that translates cron queries to OpenClaw Gateway JSON RPC.
  */
 export class OpenClawCronGatewayAdapter implements OpenClawCronAdapter {
@@ -95,6 +153,34 @@ export class OpenClawCronGatewayAdapter implements OpenClawCronAdapter {
   ): Promise<OpenClawCronListResult> {
     return this.gatewayPort.invoke<OpenClawCronListResult>(
       createCronListRequest("cron.list", params)
+    );
+  }
+
+  /**
+   * Queries `cron.update` over the gateway RPC port.
+   *
+   * @param params Update parameters forwarded to OpenClaw.
+   * @returns The updated cron job payload.
+   */
+  public async updateCronJob(
+    params: OpenClawCronUpdateParams
+  ): Promise<OpenClawCronJob> {
+    return this.gatewayPort.invoke<OpenClawCronJob>(
+      createCronUpdateRequest("cron.update", params)
+    );
+  }
+
+  /**
+   * Queries `cron.remove` over the gateway RPC port.
+   *
+   * @param params Delete parameters forwarded to OpenClaw.
+   * @returns The remove result payload.
+   */
+  public async removeCronJob(
+    params: OpenClawCronRemoveParams
+  ): Promise<OpenClawCronRemoveResult> {
+    return this.gatewayPort.invoke<OpenClawCronRemoveResult>(
+      createCronRemoveRequest("cron.remove", params)
     );
   }
 

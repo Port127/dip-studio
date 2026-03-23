@@ -82,13 +82,26 @@ components:
       properties:
         kind:
           type: string
+        at:
+          type: string
+        everyMs:
+          type: integer
+        anchorMs:
+          type: integer
         expr:
           type: string
         tz:
           type: string
-      required:
-        - expr
-        - tz
+
+    UpdatePlanRequest:
+      summary: 编辑计划任务请求
+      type: object
+      description: 仅支持更新 `name` 和 `enabled`，且至少提供一个字段。
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
 
     CronJobState:
       summary: 计划任务运行状态

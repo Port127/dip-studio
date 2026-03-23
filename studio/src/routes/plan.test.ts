@@ -10,6 +10,7 @@ import {
   parseNonNegativeIntegerString,
   parseOptionalSingleQueryValue,
   readCronJobListQuery,
+  readUpdatePlanRequest,
   readCronRunListQuery
 } from "./plan";
 
@@ -21,10 +22,12 @@ import {
 function createResponseDouble(): Response {
   const response = {
     status: vi.fn(),
-    json: vi.fn()
+    json: vi.fn(),
+    send: vi.fn()
   } as unknown as Response;
 
   vi.mocked(response.status).mockReturnValue(response);
+  vi.mocked(response.send).mockReturnValue(response);
 
   return response;
 }
@@ -105,10 +108,49 @@ describe("cron helpers", () => {
   });
 });
 
+describe("readUpdatePlanRequest", () => {
+  it("parses a valid patch body", () => {
+    expect(
+      readUpdatePlanRequest({
+        name: "  Daily Briefing  "
+      })
+    ).toEqual({
+      name: "Daily Briefing"
+    });
+
+    expect(readUpdatePlanRequest({ enabled: false })).toEqual({
+      enabled: false
+    });
+
+    expect(readUpdatePlanRequest({ name: "Daily Briefing", enabled: true })).toEqual({
+      name: "Daily Briefing",
+      enabled: true
+    });
+  });
+
+  it("rejects invalid patch bodies", () => {
+    expect(() => readUpdatePlanRequest(null)).toThrow("Request body must be a JSON object");
+    expect(() => readUpdatePlanRequest({ nope: true })).toThrow(
+      "Request body must contain only `name` and/or `enabled`"
+    );
+    expect(() => readUpdatePlanRequest({ name: "", enabled: true })).toThrow(
+      "name must be a non-empty string when provided"
+    );
+    expect(() => readUpdatePlanRequest({ name: "   " })).toThrow(
+      "name must be a non-empty string when provided"
+    );
+    expect(() => readUpdatePlanRequest({ enabled: "true" })).toThrow(
+      "enabled must be a boolean when provided"
+    );
+  });
+});
+
 describe("createCronRouter", () => {
   it("registers plans routes", () => {
     const router = createCronRouter({
       listCronJobs: vi.fn(),
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns: vi.fn()
     }) as {
       stack: Array<{
@@ -128,10 +170,20 @@ describe("createCronRouter", () => {
       (entry) =>
         entry.route?.path === "/api/dip-studio/v1/plans/:id/runs"
     );
+    const patchLayer = router.stack.find(
+      (entry) =>
+        entry.route?.path === "/api/dip-studio/v1/plans/:id"
+        && (entry.route as { methods?: Record<string, boolean> }).methods?.put === true
+    );
+    const disableLayer = router.stack.find(
+      (entry) => entry.route?.path === "/api/dip-studio/v1/plans/:id/disable"
+    );
 
     expect(jobsLayer).toBeDefined();
     expect(plansLayer).toBeDefined();
     expect(planRunsLayer).toBeDefined();
+    expect(patchLayer).toBeDefined();
+    expect(disableLayer).toBeUndefined();
   });
 
   it("handles cron jobs request", async () => {
@@ -145,6 +197,8 @@ describe("createCronRouter", () => {
     });
     const router = createCronRouter({
       listCronJobs,
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns: vi.fn()
     }) as {
       stack: Array<{
@@ -193,6 +247,8 @@ describe("createCronRouter", () => {
     const badRequest = new HttpError(400, "Invalid query parameter `limit`");
     const router1 = createCronRouter({
       listCronJobs: vi.fn().mockRejectedValue(badRequest),
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns: vi.fn()
     }) as {
       stack: Array<{
@@ -221,6 +277,8 @@ describe("createCronRouter", () => {
 
     const router2 = createCronRouter({
       listCronJobs: vi.fn().mockRejectedValue(new Error("boom")),
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns: vi.fn()
     }) as {
       stack: Array<{
@@ -290,6 +348,8 @@ describe("createCronRouter", () => {
     });
     const router = createCronRouter({
       listCronJobs,
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns: vi.fn()
     }) as {
       stack: Array<{
@@ -369,6 +429,8 @@ describe("createCronRouter", () => {
     });
     const router = createCronRouter({
       listCronJobs: vi.fn(),
+      updateCronJob: vi.fn(),
+      deleteCronJob: vi.fn(),
       listCronRuns
     }) as {
       stack: Array<{
@@ -411,5 +473,151 @@ describe("createCronRouter", () => {
     });
     expect(response.status).toHaveBeenCalledWith(200);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("handles plan update request", async () => {
+    const updateCronJob = vi.fn().mockResolvedValue({
+      id: "plan-1",
+      agentId: "dh-1",
+      sessionKey: "agent:dh-1:user:user-1:direct:chat-1",
+      name: "Updated Plan",
+      enabled: true,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      schedule: {
+        expr: "0 9 * * *",
+        tz: "Asia/Shanghai"
+      }
+    });
+    const router = createCronRouter({
+      listCronJobs: vi.fn(),
+      updateCronJob,
+      deleteCronJob: vi.fn(),
+      listCronRuns: vi.fn()
+    }) as {
+      stack: Array<{
+        route?: {
+          path: string;
+          stack: Array<{
+            handle: (
+              request: Request,
+              response: Response,
+              next: NextFunction
+            ) => Promise<void>;
+          }>;
+        };
+      }>;
+    };
+    const layer = router.stack.find(
+      (entry) =>
+        entry.route?.path === "/api/dip-studio/v1/plans/:id"
+        && (entry.route as { methods?: Record<string, boolean> }).methods?.put === true
+    );
+    const handler = layer?.route?.stack[0]?.handle;
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+    const request = {
+      params: {
+        id: "plan-1"
+      },
+      body: {
+        name: "Updated Plan"
+      },
+      headers: {}
+    } as unknown as Request;
+
+    injectAuthenticatedUserId(request, "user-1");
+
+    await handler?.(request, response, next);
+
+    expect(updateCronJob).toHaveBeenCalledWith({
+      id: "plan-1",
+      patch: {
+        name: "Updated Plan"
+      },
+      userId: "user-1"
+    });
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it("handles enabled update and delete plan requests", async () => {
+    const updateCronJob = vi.fn().mockResolvedValue({
+      id: "plan-1",
+      agentId: "dh-1",
+      sessionKey: "agent:dh-1:user:user-1:direct:chat-1",
+      name: "Plan 1",
+      enabled: false,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      schedule: {
+        expr: "0 9 * * *",
+        tz: "Asia/Shanghai"
+      }
+    });
+    const deleteCronJob = vi.fn().mockResolvedValue({ removed: true, id: "plan-1" });
+    const router = createCronRouter({
+      listCronJobs: vi.fn(),
+      updateCronJob,
+      deleteCronJob,
+      listCronRuns: vi.fn()
+    }) as {
+      stack: Array<{
+        route?: {
+          path: string;
+          stack: Array<{
+            handle: (
+              request: Request,
+              response: Response,
+              next: NextFunction
+            ) => Promise<void>;
+          }>;
+        };
+      }>;
+    };
+    const updateLayer = router.stack.find(
+      (entry) =>
+        entry.route?.path === "/api/dip-studio/v1/plans/:id"
+        && (entry.route as { methods?: Record<string, boolean> }).methods?.put === true
+    );
+    const deleteLayer = router.stack.find(
+      (entry) =>
+        entry.route?.path === "/api/dip-studio/v1/plans/:id"
+        && (entry.route as { methods?: Record<string, boolean> }).methods?.delete === true
+    );
+    const updateHandler = updateLayer?.route?.stack[0]?.handle;
+    const deleteHandler = deleteLayer?.route?.stack[0]?.handle;
+    const updateResponse = createResponseDouble();
+    const deleteResponse = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+    const updateRequest = {
+      params: { id: "plan-1" },
+      body: { enabled: false },
+      headers: {}
+    } as unknown as Request;
+    const deleteRequest = {
+      params: { id: "plan-1" },
+      headers: {}
+    } as unknown as Request;
+
+    injectAuthenticatedUserId(updateRequest, "user-1");
+    injectAuthenticatedUserId(deleteRequest, "user-1");
+
+    await updateHandler?.(updateRequest, updateResponse, next);
+    await deleteHandler?.(deleteRequest, deleteResponse, next);
+
+    expect(updateCronJob).toHaveBeenCalledWith({
+      id: "plan-1",
+      patch: {
+        enabled: false
+      },
+      userId: "user-1"
+    });
+    expect(deleteCronJob).toHaveBeenCalledWith({
+      id: "plan-1",
+      userId: "user-1"
+    });
+    expect(updateResponse.status).toHaveBeenCalledWith(200);
+    expect(deleteResponse.status).toHaveBeenCalledWith(204);
+    expect(deleteResponse.send).toHaveBeenCalled();
   });
 });

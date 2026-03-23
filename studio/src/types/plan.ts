@@ -62,19 +62,159 @@ export interface OpenClawCronListParams {
  */
 export interface OpenClawCronJobSchedule {
   /**
-   * Schedule kind. For cron jobs this is usually `cron`.
+   * Schedule kind.
    */
   kind?: string;
 
   /**
+   * One-off execution timestamp represented as an ISO string.
+   */
+  at?: string;
+
+  /**
+   * Fixed interval in milliseconds.
+   */
+  everyMs?: number;
+
+  /**
+   * Optional interval anchor timestamp in milliseconds.
+   */
+  anchorMs?: number;
+
+  /**
    * Cron expression.
    */
-  expr: string;
+  expr?: string;
 
   /**
    * Timezone used to evaluate the cron expression.
    */
-  tz: string;
+  tz?: string;
+}
+
+/**
+ * Plan update body exposed by Studio.
+ */
+export interface UpdatePlanRequest {
+  /**
+   * Updated display name.
+   */
+  name?: string;
+
+  /**
+   * Updated enabled flag.
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Cron job update body expected by OpenClaw.
+ */
+export interface OpenClawCronUpdatePatch {
+  /**
+   * Updated display name.
+   */
+  name?: string;
+
+  /**
+   * Updated enabled flag.
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Request payload sent to OpenClaw `cron.update`.
+ */
+export interface OpenClawCronUpdateParams {
+  /**
+   * Stable job identifier.
+   */
+  id?: string;
+
+  /**
+   * Alternative stable job identifier.
+   */
+  jobId?: string;
+
+  /**
+   * Cron job update body expected by OpenClaw.
+   */
+  patch: OpenClawCronUpdatePatch;
+}
+
+/**
+ * Request payload sent to OpenClaw `cron.remove`.
+ */
+export interface OpenClawCronRemoveParams {
+  /**
+   * Stable job identifier.
+   */
+  id?: string;
+
+  /**
+   * Alternative stable job identifier.
+   */
+  jobId?: string;
+}
+
+/**
+ * Response payload returned by OpenClaw `cron.remove`.
+ */
+export interface OpenClawCronRemoveResult {
+  /**
+   * Whether one job was removed.
+   */
+  removed: boolean;
+
+  /**
+   * Removed job identifier.
+   */
+  id?: string;
+
+  /**
+   * Removed job identifier alias.
+   */
+  jobId?: string;
+
+  /**
+   * Removed job snapshot when provided upstream.
+   */
+  job?: OpenClawCronJob;
+}
+
+/**
+ * Plan update command accepted by application logic.
+ */
+export interface UpdateCronJobCommand {
+  /**
+   * Stable job identifier.
+   */
+  id: string;
+
+  /**
+   * Plan update body.
+   */
+  patch: UpdatePlanRequest;
+
+  /**
+   * Optional authenticated user identifier.
+   */
+  userId?: string;
+}
+
+/**
+ * Plan delete or disable command accepted by application logic.
+ */
+export interface DeleteCronJobCommand {
+  /**
+   * Stable job identifier.
+   */
+  id: string;
+
+  /**
+   * Optional authenticated user identifier.
+   */
+  userId?: string;
 }
 
 /**

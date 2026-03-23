@@ -209,6 +209,41 @@ openssl pkey -in private.pem -pubout -out public.pem
 | hasMore | boolean | 是否还有更多数据 |
 | nextOffset | number \| null | 下一页偏移量 |
 
+#### 编辑计划任务
+
+`PUT /api/dip-studio/v1/plans/{id}`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 计划任务 ID |
+
+请求：`application/json`
+
+请求体：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| name | string | 否 | 新的计划任务名称 |
+| enabled | boolean | 否 | 是否启用计划任务；`true` 为启用，`false` 为禁用 |
+
+响应：`200 application/json`
+
+返回更新后的 `CronJob` 对象。
+
+#### 删除计划任务
+
+`DELETE /api/dip-studio/v1/plans/{id}`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 计划任务 ID |
+
+响应：`204`
+
 #### 创建数字员工
 
 `POST /api/dip-studio/v1/digital-human`
