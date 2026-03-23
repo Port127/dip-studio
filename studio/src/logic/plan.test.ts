@@ -146,10 +146,9 @@ describe("DefaultCronLogic", () => {
 
     await expect(
       logic.listCronRuns({
-        scope: "all",
+        id: "job-1",
         limit: 50,
         offset: 0,
-        status: "all",
         sortDir: "desc"
       })
     ).resolves.toEqual({

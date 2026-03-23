@@ -9,7 +9,6 @@ import {
   parseCronRunSortDir,
   parseNonNegativeIntegerString,
   parseOptionalSingleQueryValue,
-  parseQueryStringList,
   readCronJobListQuery,
   readCronRunListQuery
 } from "./plan";
@@ -63,68 +62,25 @@ describe("readCronJobListQuery", () => {
 
 describe("readCronRunListQuery", () => {
   it("uses expected defaults", () => {
-    expect(readCronRunListQuery({})).toEqual({
-      scope: "all",
-      id: undefined,
-      jobId: undefined,
+    expect(readCronRunListQuery({ id: "plan-1" })).toEqual({
+      id: "plan-1",
       limit: 50,
       offset: 0,
-      status: "all",
-      statuses: undefined,
-      deliveryStatus: undefined,
-      deliveryStatuses: undefined,
-      query: undefined,
       sortDir: "desc"
     });
   });
 
-  it("rejects scope=job without id/jobId", () => {
-    expect(() => readCronRunListQuery({ scope: "job" })).toThrow(
-      "Invalid query parameter `id` or `jobId`"
-    );
+  it("requires id", () => {
+    expect(() => readCronRunListQuery({})).toThrow("Invalid query parameter `id`");
   });
 
-  it("rejects invalid scope and over-limit requests", () => {
-    expect(() => readCronRunListQuery({ scope: "bad" })).toThrow(
-      "Invalid query parameter `scope`"
-    );
+  it("rejects over-limit requests", () => {
     expect(() =>
       readCronRunListQuery({
+        id: "plan-1",
         limit: "201"
       })
     ).toThrow("Invalid query parameter `limit`");
-  });
-
-  it("parses list filters", () => {
-    expect(
-      readCronRunListQuery({
-        statuses: "ok,error",
-        deliveryStatus: "unknown",
-        deliveryStatuses: ["unknown", "not-delivered"]
-      })
-    ).toMatchObject({
-      deliveryStatus: "unknown",
-      statuses: ["ok", "error"],
-      deliveryStatuses: ["unknown", "not-delivered"]
-    });
-  });
-
-  it("parses explicit status filter", () => {
-    expect(
-      readCronRunListQuery({
-        status: "ok"
-      })
-    ).toMatchObject({
-      status: "ok"
-    });
-  });
-
-  it("rejects invalid list filters", () => {
-    expect(() =>
-      readCronRunListQuery({
-        statuses: "ok,bad"
-      })
-    ).toThrow("Invalid query parameter `statuses`");
   });
 });
 
@@ -142,10 +98,6 @@ describe("cron helpers", () => {
     expect(parseOptionalSingleQueryValue(["single"], "id")).toBe("single");
     expect(() => parseOptionalSingleQueryValue(["a", "b"], "id")).toThrow(
       "Invalid query parameter `id`"
-    );
-    expect(parseQueryStringList("ok,error", "statuses")).toEqual(["ok", "error"]);
-    expect(() => parseQueryStringList("", "statuses")).toThrow(
-      "Invalid query parameter `statuses`"
     );
     expect(() => parseCronRunSortDir("bad")).toThrow(
       "Invalid query parameter `sortDir`"
@@ -452,16 +404,9 @@ describe("createCronRouter", () => {
     );
 
     expect(listCronRuns).toHaveBeenCalledWith({
-      scope: "job",
-      id: undefined,
-      jobId: "plan-1",
+      id: "plan-1",
       limit: 50,
       offset: 0,
-      status: "all",
-      statuses: undefined,
-      deliveryStatus: undefined,
-      deliveryStatuses: undefined,
-      query: undefined,
       sortDir: "desc"
     });
     expect(response.status).toHaveBeenCalledWith(200);

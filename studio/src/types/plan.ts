@@ -243,25 +243,6 @@ export interface OpenClawCronListResult {
 }
 
 /**
- * Supported scope values accepted by OpenClaw `cron.runs`.
- */
-export type CronRunsScope = "all" | "job";
-
-/**
- * Supported status filter values accepted by OpenClaw `cron.runs`.
- */
-export type CronRunStatus = "all" | "ok" | "error" | "skipped";
-
-/**
- * Supported delivery status values accepted by OpenClaw `cron.runs`.
- */
-export type CronRunDeliveryStatus =
-  | "delivered"
-  | "not-delivered"
-  | "unknown"
-  | "not-requested";
-
-/**
  * Supported sort direction values accepted by OpenClaw `cron.runs`.
  */
 export type CronRunsSortDir = "asc" | "desc";
@@ -271,19 +252,9 @@ export type CronRunsSortDir = "asc" | "desc";
  */
 export interface OpenClawCronRunsParams {
   /**
-   * Query scope.
+   * Cron job identifier.
    */
-  scope: CronRunsScope;
-
-  /**
-   * Optional job id. Required when scope is `job`.
-   */
-  id?: string;
-
-  /**
-   * Optional job id alias. Required when scope is `job`.
-   */
-  jobId?: string;
+  id: string;
 
   /**
    * Maximum number of run entries to return.
@@ -294,31 +265,6 @@ export interface OpenClawCronRunsParams {
    * Zero-based list offset.
    */
   offset: number;
-
-  /**
-   * Single status filter.
-   */
-  status?: CronRunStatus;
-
-  /**
-   * Multi-status filter.
-   */
-  statuses?: CronRunStatus[];
-
-  /**
-   * Single delivery status filter.
-   */
-  deliveryStatus?: CronRunDeliveryStatus;
-
-  /**
-   * Multi-delivery-status filter.
-   */
-  deliveryStatuses?: CronRunDeliveryStatus[];
-
-  /**
-   * Free text query filter.
-   */
-  query?: string;
 
   /**
    * Sort direction.

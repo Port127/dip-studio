@@ -10,10 +10,7 @@ import type {
   CronListEnabledFilter,
   CronListSortBy,
   CronListSortDir,
-  CronRunDeliveryStatus,
-  CronRunStatus,
   OpenClawCronListResult,
-  CronRunsScope,
   CronRunsSortDir,
   OpenClawCronListParams,
   OpenClawCronRunsParams
@@ -59,19 +56,9 @@ export interface CronJobListQuery {
  */
 export interface CronRunListQuery {
   /**
-   * Query scope.
-   */
-  scope?: string | string[];
-
-  /**
    * Job id filter.
    */
   id?: string | string[];
-
-  /**
-   * Job id alias filter.
-   */
-  jobId?: string | string[];
 
   /**
    * Maximum page size.
@@ -82,31 +69,6 @@ export interface CronRunListQuery {
    * Zero-based page offset.
    */
   offset?: string | string[];
-
-  /**
-   * Single status filter.
-   */
-  status?: string | string[];
-
-  /**
-   * Multi-status filter.
-   */
-  statuses?: string | string[];
-
-  /**
-   * Single delivery status filter.
-   */
-  deliveryStatus?: string | string[];
-
-  /**
-   * Multi-delivery-status filter.
-   */
-  deliveryStatuses?: string | string[];
-
-  /**
-   * Keyword query.
-   */
-  query?: string | string[];
 
   /**
    * Sort direction.
@@ -215,8 +177,7 @@ export function createCronRouter(logic: CronLogic = cronLogic): Router {
       try {
         const query = readCronRunListQuery({
           ...request.query,
-          scope: "job",
-          jobId: request.params.id
+          id: request.params.id
         });
         const result = await logic.listCronRuns(query);
 
@@ -283,11 +244,8 @@ function filterCronJobsByAgentId(
  */
 export function readCronRunListQuery(query: CronRunListQuery): OpenClawCronRunsParams {
   const id = parseOptionalSingleQueryValue(query.id, "id");
-  const jobId = parseOptionalSingleQueryValue(query.jobId, "jobId");
-  const scope = parseCronRunsScope(query.scope, id, jobId);
-
-  if (scope === "job" && id === undefined && jobId === undefined) {
-    throw new HttpError(400, "Invalid query parameter `id` or `jobId`");
+  if (id === undefined) {
+    throw new HttpError(400, "Invalid query parameter `id`");
   }
 
   const limit = parseNonNegativeIntegerQueryValue(query.limit, 50, "limit");
@@ -297,16 +255,9 @@ export function readCronRunListQuery(query: CronRunListQuery): OpenClawCronRunsP
   }
 
   return {
-    scope,
     id,
-    jobId,
     limit,
     offset: parseNonNegativeIntegerQueryValue(query.offset, 0, "offset"),
-    status: parseCronRunStatus(query.status),
-    statuses: parseCronRunStatuses(query.statuses),
-    deliveryStatus: parseCronRunDeliveryStatus(query.deliveryStatus),
-    deliveryStatuses: parseCronRunDeliveryStatuses(query.deliveryStatuses),
-    query: parseOptionalSingleQueryValue(query.query, "query"),
     sortDir: parseCronRunSortDir(query.sortDir)
   };
 }
@@ -404,26 +355,6 @@ export function parseCronJobSortDir(rawValue: string | undefined): CronListSortD
 }
 
 /**
- * Parses cron runs scope and infers default based on job filters.
- *
- * @param rawValue Raw query value.
- * @param id Parsed `id` query value.
- * @param jobId Parsed `jobId` query value.
- * @returns Parsed scope.
- */
-export function parseCronRunsScope(
-  rawValue: string | string[] | undefined,
-  id: string | undefined,
-  jobId: string | undefined
-): CronRunsScope {
-  if (rawValue === undefined) {
-    return id !== undefined || jobId !== undefined ? "job" : "all";
-  }
-
-  return parseQueryEnum(rawValue, "all", ["all", "job"], "scope");
-}
-
-/**
  * Parses a non-negative integer query value.
  *
  * @param rawValue Raw query value.
@@ -447,76 +378,6 @@ export function parseNonNegativeIntegerQueryValue(
   }
 
   return Number(normalized);
-}
-
-/**
- * Parses cron run status filter.
- *
- * @param rawValue Raw query value.
- * @returns Parsed status filter.
- */
-export function parseCronRunStatus(
-  rawValue: string | string[] | undefined
-): CronRunStatus | undefined {
-  if (rawValue === undefined) {
-    return "all";
-  }
-
-  return parseQueryEnum<CronRunStatus>(
-    rawValue,
-    "all",
-    ["all", "ok", "error", "skipped"],
-    "status"
-  );
-}
-
-/**
- * Parses cron run statuses filter.
- *
- * @param rawValue Raw query value.
- * @returns Parsed statuses list.
- */
-export function parseCronRunStatuses(
-  rawValue: string | string[] | undefined
-): CronRunStatus[] | undefined {
-  return parseQueryEnumList(rawValue, ["all", "ok", "error", "skipped"], "statuses");
-}
-
-/**
- * Parses cron run delivery status filter.
- *
- * @param rawValue Raw query value.
- * @returns Parsed delivery status filter.
- */
-export function parseCronRunDeliveryStatus(
-  rawValue: string | string[] | undefined
-): CronRunDeliveryStatus | undefined {
-  if (rawValue === undefined) {
-    return undefined;
-  }
-
-  return parseQueryEnum<CronRunDeliveryStatus>(
-    rawValue,
-    "unknown",
-    ["delivered", "not-delivered", "unknown", "not-requested"],
-    "deliveryStatus"
-  );
-}
-
-/**
- * Parses cron run delivery statuses filter.
- *
- * @param rawValue Raw query value.
- * @returns Parsed delivery statuses list.
- */
-export function parseCronRunDeliveryStatuses(
-  rawValue: string | string[] | undefined
-): CronRunDeliveryStatus[] | undefined {
-  return parseQueryEnumList(
-    rawValue,
-    ["delivered", "not-delivered", "unknown", "not-requested"],
-    "deliveryStatuses"
-  );
 }
 
 /**

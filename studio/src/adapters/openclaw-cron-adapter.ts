@@ -64,7 +64,12 @@ export function createCronRunsRequest(
     type: "req",
     id: requestId,
     method: "cron.runs",
-    params
+    params: {
+      id: params.id,
+      limit: params.limit,
+      offset: params.offset,
+      sortDir: params.sortDir
+    }
   };
 }
 

@@ -147,6 +147,62 @@ openssl pkey -in private.pem -pubout -out public.pem
 | [\].name | string | 技能名称 |
 | [\].description | string | 技能描述，可选 |
 
+#### 获取计划任务列表
+
+`GET /api/dip-studio/v1/plans`
+
+支持查询参数：`includeDisabled`、`limit`、`offset`、`enabled`、`sortBy`、`sortDir`
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| jobs | CronJob[] | 计划任务列表 |
+| total | number | 命中总数 |
+| offset | number | 当前偏移量 |
+| limit | number | 当前分页大小 |
+| hasMore | boolean | 是否还有更多数据 |
+| nextOffset | number \| null | 下一页偏移量 |
+
+#### 获取指定数字员工的计划任务列表
+
+`GET /api/dip-studio/v1/digital-human/{id}/plans`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 数字员工 ID |
+
+支持查询参数：`includeDisabled`、`limit`、`offset`、`enabled`、`sortBy`、`sortDir`
+
+响应：`200 application/json`
+
+结构同 `GET /api/dip-studio/v1/plans`。
+
+#### 获取计划任务运行记录
+
+`GET /api/dip-studio/v1/plans/{id}/runs`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 计划任务 ID |
+
+支持查询参数：`limit`、`offset`、`sortDir`
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| entries | CronRunEntry[] | 运行记录列表 |
+| total | number | 命中总数 |
+| offset | number | 当前偏移量 |
+| limit | number | 当前分页大小 |
+| hasMore | boolean | 是否还有更多数据 |
+| nextOffset | number \| null | 下一页偏移量 |
+
 #### 创建数字员工
 
 `POST /api/dip-studio/v1/digital-human`

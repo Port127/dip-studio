@@ -37,10 +37,9 @@ describe("createCronRunsRequest", () => {
   it("builds the cron.runs JSON RPC frame", () => {
     expect(
       createCronRunsRequest("req-2", {
-        scope: "all",
+        id: "job-1",
         limit: 50,
         offset: 0,
-        status: "all",
         sortDir: "desc"
       })
     ).toEqual({
@@ -48,10 +47,9 @@ describe("createCronRunsRequest", () => {
       id: "req-2",
       method: "cron.runs",
       params: {
-        scope: "all",
+        id: "job-1",
         limit: 50,
         offset: 0,
-        status: "all",
         sortDir: "desc"
       }
     });
@@ -106,10 +104,9 @@ describe("OpenClawCronGatewayAdapter", () => {
 
     await expect(
       adapter.listCronRuns({
-        scope: "all",
+        id: "job-1",
         limit: 50,
         offset: 0,
-        status: "all",
         sortDir: "desc"
       })
     ).resolves.toEqual({
