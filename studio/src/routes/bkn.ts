@@ -1,9 +1,15 @@
-import { Router, type NextFunction, type Request, type Response } from "express";
+import {
+  Router,
+  type NextFunction,
+  type Request,
+  type Response
+} from "express";
 
 import { getEnv } from "../utils/env";
 import { HttpError } from "../errors/http-error";
 import {
   DefaultBknHttpClient,
+  resolveBknBusinessDomain,
   type BknHttpClient,
   type BknProxyResponse
 } from "../infra/bkn-http-client";
@@ -19,6 +25,16 @@ const bknHttpClient = new DefaultBknHttpClient({
   token: env.appUserToken,
   timeoutMs: env.openClawGatewayTimeoutMs
 });
+
+/**
+ * Resolves `x-business-domain` from an Express request for BKN upstream calls.
+ *
+ * @param request Incoming HTTP request (headers only are read).
+ * @returns Value sent upstream on `x-business-domain`.
+ */
+function readBknBusinessDomainHeader(request: Pick<Request, "headers">): string {
+  return resolveBknBusinessDomain(request.headers["x-business-domain"]);
+}
 
 /**
  * Builds the BKN proxy router.
@@ -37,7 +53,11 @@ export function createBknRouter(client: BknHttpClient = bknHttpClient): Router {
       next: NextFunction
     ): Promise<void> => {
       try {
-        const result = await client.listKnowledgeNetworks(request.query);
+        const businessDomain = readBknBusinessDomainHeader(request);
+        const result = await client.listKnowledgeNetworks(
+          request.query,
+          businessDomain
+        );
         writeProxyResponse(response, result);
       } catch (error) {
         next(error instanceof HttpError ? error : new HttpError(502, "Failed to query BKN knowledge networks"));
@@ -54,7 +74,12 @@ export function createBknRouter(client: BknHttpClient = bknHttpClient): Router {
     ): Promise<void> => {
       try {
         const knId = readRequiredKnId(request.params.kn_id);
-        const result = await client.getKnowledgeNetwork(knId, request.query);
+        const businessDomain = readBknBusinessDomainHeader(request);
+        const result = await client.getKnowledgeNetwork(
+          knId,
+          request.query,
+          businessDomain
+        );
         writeProxyResponse(response, result);
       } catch (error) {
         next(error instanceof HttpError ? error : new HttpError(502, "Failed to query BKN knowledge network"));

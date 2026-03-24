@@ -128,13 +128,33 @@ openssl pkey -in private.pem -pubout -out public.pem
 
 服务会将以下请求转发到 `BKN_BACKEND_URL` 的 BKN Backend 接口，并使用环境变量 `APP_USER_TOKEN` 生成上游请求头 `Authorization: Bearer <APP_USER_TOKEN>`。
 
+两个接口均支持请求头 `x-business-domain`：会原样透传到 BKN Backend；若调用方未传或值为空，服务端会默认使用 `bd_public`。
+
 `GET /api/dip-studio/v1/knowledge-networks`
 
-支持查询参数：`name_pattern`、`sort`、`direction`、`offset`、`limit`、`tag`
+请求头：`x-business-domain`（可选，默认 `bd_public`）
+
+查询参数（含义与 BKN Backend 参考文档 `docs/references/openapi/bkn-backend/business-knowledge-network.yaml` 中 `GET /api/bkn-backend/v1/knowledge-networks` 一致）：
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| name_pattern | string | 按业务知识网络名称模糊查询；默认为空。 |
+| sort | string | 排序字段：`update_time`、`name`；默认 `update_time`。 |
+| direction | string | 排序方向：`asc`、`desc`；默认 `desc`。 |
+| offset | integer | 分页起始偏移量；须 ≥ 0；默认 `0`。 |
+| limit | integer | 每页最大条数；分页可取 `1`–`1000`，`-1` 表示不分页；默认 `10`。 |
+| tag | string | 按标签精确匹配；默认为空。 |
 
 `GET /api/dip-studio/v1/knowledge-networks/{kn_id}`
 
-支持查询参数：`mode`、`include_statistics`
+请求头：`x-business-domain`（可选，默认 `bd_public`）
+
+查询参数（含义与同参考文档中 `GET /api/bkn-backend/v1/knowledge-networks/{kn_id}` 一致）：
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| mode | string | 查询模式：空字符串表示仅知识网络详情、不含子类；`export` 为导出模式。 |
+| include_statistics | boolean | 是否返回业务知识网络下概念的统计信息；默认 `false`。 |
 
 #### 获取指定数字员工已配置技能列表
 

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HttpError } from "../errors/http-error";
 import type { BknHttpClient } from "../infra/bkn-http-client";
+import { DEFAULT_BKN_BUSINESS_DOMAIN } from "../infra/bkn-http-client";
 import {
   createBknRouter,
   readRequiredKnId,
@@ -105,12 +106,18 @@ describe("createBknRouter", () => {
     const next = vi.fn<NextFunction>();
 
     await handler?.(
-      { query: { limit: "10" } } as unknown as Request,
+      {
+        query: { limit: "10" },
+        headers: {}
+      } as unknown as Request,
       response,
       next
     );
 
-    expect(client.listKnowledgeNetworks).toHaveBeenCalledWith({ limit: "10" });
+    expect(client.listKnowledgeNetworks).toHaveBeenCalledWith(
+      { limit: "10" },
+      DEFAULT_BKN_BUSINESS_DOMAIN
+    );
     expect(response.setHeader).toHaveBeenCalledWith(
       "content-type",
       "application/json"
@@ -135,16 +142,45 @@ describe("createBknRouter", () => {
     await handler?.(
       {
         params: { kn_id: "kn-1" },
-        query: { include_statistics: "true" }
+        query: { include_statistics: "true" },
+        headers: {}
       } as unknown as Request,
       response,
       next
     );
 
-    expect(client.getKnowledgeNetwork).toHaveBeenCalledWith("kn-1", {
-      include_statistics: "true"
-    });
+    expect(client.getKnowledgeNetwork).toHaveBeenCalledWith(
+      "kn-1",
+      {
+        include_statistics: "true"
+      },
+      DEFAULT_BKN_BUSINESS_DOMAIN
+    );
     expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it("forwards x-business-domain to the BKN client", async () => {
+    const client = createClientDouble();
+    vi.mocked(client.listKnowledgeNetworks).mockResolvedValue({
+      status: 200,
+      headers: new Headers(),
+      body: "{}"
+    });
+    const router = createBknRouter(client) as Router;
+    const handler = findHandler(router, "get", collectionPath);
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      {
+        query: {},
+        headers: { "x-business-domain": "bd_tenant_a" }
+      } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(client.listKnowledgeNetworks).toHaveBeenCalledWith({}, "bd_tenant_a");
   });
 
   it("rejects empty kn_id values", async () => {
@@ -175,7 +211,11 @@ describe("createBknRouter", () => {
     const response = createResponseDouble();
     const next = vi.fn<NextFunction>();
 
-    await handler?.({ query: {} } as unknown as Request, response, next);
+    await handler?.(
+      { query: {}, headers: {} } as unknown as Request,
+      response,
+      next
+    );
 
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({

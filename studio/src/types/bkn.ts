@@ -1,4 +1,11 @@
 /**
+ * BKN proxy query and path types.
+ *
+ * List and detail `GET` routes also accept inbound header `x-business-domain` (optional); when
+ * missing or blank, the server forwards `bd_public` to the BKN Backend.
+ */
+
+/**
  * Query parameters supported by the BKN knowledge network list endpoint.
  */
 export interface BknKnowledgeNetworksListQuery {

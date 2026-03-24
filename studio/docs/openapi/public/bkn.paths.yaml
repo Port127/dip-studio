@@ -3,6 +3,13 @@
     summary: 获取业务知识网络列表
     description: 透传到 BKN Backend 的业务知识网络列表查询接口。
     parameters:
+      - name: x-business-domain
+        in: header
+        required: false
+        schema:
+          type: string
+          default: bd_public
+        description: 透传到 BKN Backend 的 `x-business-domain`；未传或为空时服务端默认使用 `bd_public`。
       - name: name_pattern
         in: query
         schema:
@@ -53,6 +60,13 @@
     summary: 获取业务知识网络详情
     description: 透传到 BKN Backend 的业务知识网络详情接口。
     parameters:
+      - name: x-business-domain
+        in: header
+        required: false
+        schema:
+          type: string
+          default: bd_public
+        description: 透传到 BKN Backend 的 `x-business-domain`；未传或为空时服务端默认使用 `bd_public`。
       - name: mode
         in: query
         schema:
