@@ -12,6 +12,7 @@ import type {
   CronListSortDir,
   DeleteCronJobCommand,
   OpenClawCronListResult,
+  PlanContentResponse,
   CronRunsSortDir,
   OpenClawCronListParams,
   OpenClawCronRunsParams,
@@ -118,7 +119,8 @@ const cronLogic = new DefaultCronLogic(
       token: env.openClawGatewayToken,
       timeoutMs: env.openClawGatewayTimeoutMs
     })
-  )
+  ),
+  env.openClawWorkspaceDir
 );
 
 /**
@@ -175,6 +177,30 @@ export function createCronRouter(logic: CronLogic = cronLogic): Router {
           error instanceof HttpError
             ? error
             : new HttpError(502, "Failed to query digital human plans")
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/dip-studio/v1/plans/:id/content",
+    async (
+      request: Request<PlanParams, PlanContentResponse, unknown>,
+      response: Response<PlanContentResponse>,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const result = await logic.getPlanContent({
+          id: request.params.id,
+          userId: readAuthenticatedUserId(request)
+        });
+
+        response.status(200).json(result);
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to read plan content")
         );
       }
     }

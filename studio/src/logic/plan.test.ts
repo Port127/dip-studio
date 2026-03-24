@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { DefaultCronLogic } from "./plan";
@@ -16,7 +19,7 @@ describe("DefaultCronLogic", () => {
       updateCronJob: vi.fn(),
       removeCronJob: vi.fn(),
       listCronRuns: vi.fn()
-    });
+    }, "workspace");
 
     await expect(
       logic.listCronJobs({
@@ -34,7 +37,7 @@ describe("DefaultCronLogic", () => {
       limit: 50,
       hasMore: false,
       nextOffset: null
-    });
+    }, "workspace");
   });
 
   it("filters cron jobs by session user id", async () => {
@@ -85,13 +88,13 @@ describe("DefaultCronLogic", () => {
       limit: 50,
       hasMore: false,
       nextOffset: null
-    });
+    }, "workspace");
     const logic = new DefaultCronLogic({
       listCronJobs,
       updateCronJob: vi.fn(),
       removeCronJob: vi.fn(),
       listCronRuns: vi.fn()
-    });
+    }, "workspace");
 
     await expect(
       logic.listCronJobs({
@@ -148,7 +151,7 @@ describe("DefaultCronLogic", () => {
         hasMore: false,
         nextOffset: null
       })
-    });
+    }, "workspace");
 
     await expect(
       logic.listCronRuns({
@@ -370,6 +373,51 @@ describe("DefaultCronLogic", () => {
 
     expect(removeCronJob).toHaveBeenCalledWith({
       id: "job-2"
+    });
+  });
+
+  it("reads PLAN.md content for a user-owned job", async () => {
+    const workspaceDir = join(process.cwd(), ".tmp-plan-test");
+    const planDir = join(workspaceDir, "dh-1", "archives", "chat-1");
+    const planPath = join(planDir, "PLAN.md");
+    const listCronJobs = vi.fn().mockResolvedValue({
+      jobs: [
+        {
+          id: "job-1",
+          agentId: "dh-1",
+          sessionKey: "agent:dh-1:user:user-1:direct:chat-1",
+          name: "Job 1",
+          enabled: true,
+          createdAtMs: 1,
+          updatedAtMs: 2,
+          schedule: {
+            expr: "0 9 * * *",
+            tz: "Asia/Shanghai"
+          }
+        }
+      ],
+      total: 1,
+      offset: 0,
+      limit: 200,
+      hasMore: false,
+      nextOffset: null
+    });
+    await mkdir(planDir, { recursive: true });
+    await writeFile(planPath, "# PLAN\nhello", "utf8");
+    const logic = new DefaultCronLogic({
+      listCronJobs,
+      updateCronJob: vi.fn(),
+      removeCronJob: vi.fn(),
+      listCronRuns: vi.fn()
+    }, workspaceDir);
+
+    await expect(
+      logic.getPlanContent({
+        id: "job-1",
+        userId: "user-1"
+      })
+    ).resolves.toEqual({
+      content: "# PLAN\nhello"
     });
   });
 

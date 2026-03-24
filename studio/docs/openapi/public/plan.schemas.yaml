@@ -202,3 +202,13 @@ components:
         - jobId
         - action
         - status
+
+    PlanContentResponse:
+      summary: 计划文件内容响应
+      type: object
+      properties:
+        content:
+          type: string
+          description: PLAN.md 原始文本内容
+      required:
+        - content

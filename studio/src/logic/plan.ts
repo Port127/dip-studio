@@ -1,10 +1,15 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import type { OpenClawCronAdapter } from "../adapters/openclaw-cron-adapter";
 import { HttpError } from "../errors/http-error";
 import type {
   DeleteCronJobCommand,
+  GetPlanContentCommand,
   OpenClawCronListParams,
   OpenClawCronJob,
   OpenClawCronListResult,
+  PlanContentResponse,
   OpenClawCronRemoveResult,
   OpenClawCronRunsParams,
   OpenClawCronRunsResult,
@@ -43,6 +48,14 @@ export interface CronLogic {
   deleteCronJob(command: DeleteCronJobCommand): Promise<OpenClawCronRemoveResult>;
 
   /**
+   * Reads one plan markdown file after ownership validation.
+   *
+   * @param command The read command.
+   * @returns The normalized PLAN.md content.
+   */
+  getPlanContent(command: GetPlanContentCommand): Promise<PlanContentResponse>;
+
+  /**
    * Fetches cron run history with the requested filters.
    *
    * @param params Query parameters forwarded to OpenClaw.
@@ -59,8 +72,12 @@ export class DefaultCronLogic implements CronLogic {
    * Creates the cron logic.
    *
    * @param openClawCronAdapter The adapter used to fetch OpenClaw cron data.
+   * @param openClawWorkspaceDir The OpenClaw workspace root used to read PLAN.md.
    */
-  public constructor(private readonly openClawCronAdapter: OpenClawCronAdapter) {}
+  public constructor(
+    private readonly openClawCronAdapter: OpenClawCronAdapter,
+    private readonly openClawWorkspaceDir: string
+  ) {}
 
   /**
    * Fetches cron jobs from OpenClaw.
@@ -114,6 +131,29 @@ export class DefaultCronLogic implements CronLogic {
     return this.openClawCronAdapter.removeCronJob({
       id: command.id
     });
+  }
+
+  /**
+   * Reads one plan markdown file from the OpenClaw workspace.
+   *
+   * @param command The read command.
+   * @returns The normalized PLAN.md content.
+   */
+  public async getPlanContent(
+    command: GetPlanContentCommand
+  ): Promise<PlanContentResponse> {
+    const job = await this.readOwnedJob(command.id, command.userId);
+    const planPath = buildPlanMarkdownPath(this.openClawWorkspaceDir, job.sessionKey);
+
+    try {
+      const content = await readFile(planPath, "utf8");
+
+      return {
+        content
+      };
+    } catch (error) {
+      throw normalizePlanContentReadError(error);
+    }
   }
 
   /**
@@ -182,6 +222,51 @@ export class DefaultCronLogic implements CronLogic {
 
     throw new HttpError(404, "Plan not found");
   }
+}
+
+/**
+ * Builds the PLAN.md absolute path from one cron session key.
+ *
+ * @param workspaceDir The configured OpenClaw workspace root.
+ * @param sessionKey The cron job session key.
+ * @returns The absolute PLAN.md path.
+ */
+export function buildPlanMarkdownPath(
+  workspaceDir: string,
+  sessionKey: string
+): string {
+  const parsedSession = parseSession(sessionKey);
+
+  if (parsedSession.agent === undefined || parsedSession.chatId === undefined) {
+    throw new HttpError(404, "PLAN.md not found");
+  }
+
+  return join(workspaceDir, parsedSession.agent, "archives", parsedSession.chatId, "PLAN.md");
+}
+
+/**
+ * Normalizes file-system read failures for PLAN.md.
+ *
+ * @param error The unknown filesystem error.
+ * @returns A normalized HttpError instance.
+ */
+export function normalizePlanContentReadError(error: unknown): HttpError {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  ) {
+    return new HttpError(404, "PLAN.md not found");
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+
+  return new HttpError(502, `Failed to read PLAN.md: ${message}`);
 }
 
 /**

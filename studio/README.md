@@ -209,6 +209,22 @@ openssl pkey -in private.pem -pubout -out public.pem
 | hasMore | boolean | 是否还有更多数据 |
 | nextOffset | number \| null | 下一页偏移量 |
 
+#### 获取计划文件内容
+
+`GET /api/dip-studio/v1/plans/{id}/content`
+
+路径参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| -- | -- | -- | -- |
+| id | string | 是 | 计划任务 ID |
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| content | string | 该计划关联的 `PLAN.md` 原始文本内容 |
+
 #### 编辑计划任务
 
 `PUT /api/dip-studio/v1/plans/{id}`

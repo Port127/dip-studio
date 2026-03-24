@@ -218,6 +218,31 @@ export interface DeleteCronJobCommand {
 }
 
 /**
+ * Plan content read command accepted by application logic.
+ */
+export interface GetPlanContentCommand {
+  /**
+   * Stable job identifier.
+   */
+  id: string;
+
+  /**
+   * Optional authenticated user identifier.
+   */
+  userId?: string;
+}
+
+/**
+ * Response payload returned by the plan content endpoint.
+ */
+export interface PlanContentResponse {
+  /**
+   * Raw PLAN.md content.
+   */
+  content: string;
+}
+
+/**
  * Runtime state exposed by OpenClaw for a cron job.
  */
 export interface OpenClawCronJobState {
