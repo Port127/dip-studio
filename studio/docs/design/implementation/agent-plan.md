@@ -81,6 +81,9 @@ sequenceDiagram
   - `PLAN.md` 的归档相对路径；
   - `Task_ID`；
   - 要求 Agent **先读取**该文件对应条目再逐步执行（与 `de_agent_soul.pug` 中 Action 条款一致）。
+  - Cron 任务必须满足以下设定时 OpenClaw 才会在 `cron.runs` 返回 sessionKey：
+    * `sessionTarget` 必须是 "isolated"
+    * `payload.kind` 必须是 "agentTurn"
  
 **5. 验证**
 

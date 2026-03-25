@@ -93,6 +93,11 @@
 `Action_Steps` 的第 1 条必须是：
 `1. [读取本文件指令]：从路径 archives/{ARCHIVE_ID}/PLAN.md 中读取 Task_ID: {{TASK_UUID}} 的详细计划并按步骤执行`
 
+【Cron】
+创建 Cron 任务时，强制参数：
+1. `sessionTarget` 必须是 "isolated"
+2. `payload.kind` 必须是 "agentTurn"
+
 ==================================================
 三、PLAN.md 模板
 ==================================================
