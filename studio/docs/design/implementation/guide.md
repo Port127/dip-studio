@@ -30,6 +30,7 @@ deactivate BE
 activate BE
 SW ->> BE: 确认配置
 BE ->> BE: 写入 .env
+BE ->> OC: 与 OpenClaw Gateway 建立 WebSocket 连接
 BE ->> SW: 完成初始化
 deactivate BE
 end
@@ -83,7 +84,8 @@ openssl genpkey -algorithm ED25519 -out private.pem
 openssl pkey -in private.pem -pubout -out public.pem
 ```
 4. 执行 `npm run init:agents` 初始化 OpenClaw 默认配置、built-in agents 以及 extensions。
-5. 返回初始化结果。
+5. 初始化成功后，与 OpenClaw Gateway 建立 WebSocket 连接。
+6. 连接成功后返回初始化结果。
 
 ## HTTP 接口
 

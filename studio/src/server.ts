@@ -1,4 +1,5 @@
 import { createApp } from "./app";
+import { connectOpenClawGatewayIfInitialized } from "./logic/openclaw-gateway-bootstrap";
 import { getEnv } from "./utils/env";
 
 const env = getEnv();
@@ -16,4 +17,16 @@ export function startServer(port: number) {
   });
 }
 
-startServer(env.port);
+/**
+ * Bootstraps the gateway connection when Studio is already initialized, then
+ * starts the HTTP server.
+ *
+ * @returns The created Node.js HTTP server.
+ */
+export async function bootstrapServer() {
+  await connectOpenClawGatewayIfInitialized();
+
+  return startServer(env.port);
+}
+
+void bootstrapServer();

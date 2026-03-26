@@ -364,6 +364,47 @@ export class OpenClawGatewayClient implements OpenClawGatewayPort {
   }
 
   /**
+   * Proactively establishes the authenticated gateway WebSocket connection.
+   *
+   * @returns Nothing once the handshake completes successfully.
+   */
+  public async connect(): Promise<void> {
+    await this.ensureConnected();
+  }
+
+  /**
+   * Reconfigures the shared gateway endpoint used by the singleton client.
+   *
+   * @param url The target gateway WebSocket URL.
+   * @param token Optional gateway bearer token.
+   */
+  public reconfigureConnection(url: string, token?: string): void {
+    const hasChanged = this.options.url !== url || this.options.token !== token;
+
+    this.options.url = url;
+    this.options.token = token;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    const reconnectPreference = this.shouldReconnect;
+    this.shouldReconnect = false;
+    this.clearReconnectTimer();
+    this.clearHeartbeatTimer();
+    this.clearConnectTimer();
+    this.isConnected = false;
+    this.activeConnectRequestId = undefined;
+    this.socket?.close();
+    this.socket = undefined;
+    this.failConnect(new HttpError(502, "OpenClaw gateway connection was reconfigured"));
+    this.failPendingRequests(
+      new HttpError(502, "OpenClaw gateway connection was reconfigured")
+    );
+    this.shouldReconnect = reconnectPreference;
+  }
+
+  /**
    * Ensures there is an authenticated shared gateway connection.
    *
    * @returns Nothing once the gateway handshake has completed.

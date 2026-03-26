@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 
 import { HttpError } from "../errors/http-error";
+import { connectOpenClawGateway } from "./openclaw-gateway-bootstrap";
 import {
   asMessage,
   readOptionalString,
@@ -147,6 +148,14 @@ export interface GuideLogicOptions {
    * Optional command runner used by tests.
    */
   commandRunner?: GuideCommandRunner;
+
+  /**
+   * Optional gateway connector used by tests and initialization flows.
+   */
+  gatewayConnector?: {
+    reconfigureConnection(url: string, token?: string): void;
+    connect(): Promise<void>;
+  };
 }
 
 /**
@@ -214,6 +223,7 @@ export class DefaultGuideLogic implements GuideLogic {
   private readonly studioRootDir: string;
 
   private readonly commandRunner: GuideCommandRunner;
+  private readonly gatewayConnector?: GuideLogicOptions["gatewayConnector"];
 
   /**
    * Creates one guide logic instance.
@@ -223,6 +233,7 @@ export class DefaultGuideLogic implements GuideLogic {
   public constructor(options: GuideLogicOptions = {}) {
     this.studioRootDir = resolve(options.studioRootDir ?? process.cwd());
     this.commandRunner = options.commandRunner ?? new DefaultGuideCommandRunner();
+    this.gatewayConnector = options.gatewayConnector;
   }
 
   /**
@@ -334,6 +345,11 @@ export class DefaultGuideLogic implements GuideLogic {
     );
     await this.commandRunner.execFile("npm", ["run", "init:agents"], {
       cwd: this.studioRootDir
+    });
+    await connectOpenClawGateway({
+      url: normalized.openclaw_address,
+      token: normalized.openclaw_token,
+      connector: this.gatewayConnector
     });
   }
 }

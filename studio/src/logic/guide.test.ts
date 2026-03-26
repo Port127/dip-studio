@@ -332,11 +332,16 @@ describe("DefaultGuideLogic", () => {
         stdout: "ok",
         stderr: ""
       });
+    const gatewayConnector = {
+      reconfigureConnection: vi.fn(),
+      connect: vi.fn().mockResolvedValue(undefined)
+    };
     const logic = new DefaultGuideLogic({
       studioRootDir,
       commandRunner: {
         execFile
-      }
+      },
+      gatewayConnector
     });
 
     await expect(
@@ -361,6 +366,11 @@ describe("DefaultGuideLogic", () => {
       ["run", "init:agents"],
       { cwd: studioRootDir }
     );
+    expect(gatewayConnector.reconfigureConnection).toHaveBeenCalledWith(
+      "ws://127.0.0.1:19001",
+      "token-1"
+    );
+    expect(gatewayConnector.connect).toHaveBeenCalledOnce();
 
     await rm(studioRootDir, { recursive: true, force: true });
   });
