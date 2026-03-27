@@ -940,7 +940,9 @@ describe("gateway env helpers", () => {
 describe("getEnv", () => {
   it("reads HTTP and OpenClaw environment variables", () => {
     delete process.env.OPENCLAW_GATEWAY_URL;
-    delete process.env.HYDRA_ADMIN_URL;
+    delete process.env.KWEAVER_BASE_URL;
+    delete process.env.KWEAVER_TOKEN;
+    delete process.env.KWEAVER_HYDRA_ADMIN_URL;
     delete process.env.NODE_ENV;
     delete process.env.OAUTH_MOCK_USER_ID;
     loadEnvFile({
@@ -972,11 +974,15 @@ describe("getEnv", () => {
     });
     process.env.OPENCLAW_GATEWAY_URL = "wss://gateway.example.com/ws";
     process.env.OPENCLAW_WORKSPACE_DIR = "./openclaw-workspace";
-    process.env.HYDRA_ADMIN_URL = "https://hydra.example.com/admin";
+    process.env.KWEAVER_BASE_URL = "https://core.example.com";
+    process.env.KWEAVER_TOKEN = "token-1";
+    process.env.KWEAVER_HYDRA_ADMIN_URL = "https://hydra.example.com/admin";
     process.env.NODE_ENV = "development";
     process.env.OAUTH_MOCK_USER_ID = "user-dev";
 
     expect(getEnv()).toMatchObject({
+      bknBackendUrl: "https://core.example.com/",
+      appUserToken: "token-1",
       hydraAdminUrl: "https://hydra.example.com/",
       isDevelopment: true,
       oauthMockUserId: "user-dev",

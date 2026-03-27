@@ -74,9 +74,9 @@ export function getEnv(): {
 
   return {
     port: resolvePort(process.env.PORT),
-    bknBackendUrl: resolveBknBackendUrl(process.env.BKN_BACKEND_URL),
-    appUserToken: readOptionalString(process.env.APP_USER_TOKEN),
-    hydraAdminUrl: resolveHydraAdminUrl(process.env.HYDRA_ADMIN_URL),
+    bknBackendUrl: resolveBknBackendUrl(process.env.KWEAVER_BASE_URL),
+    appUserToken: readOptionalString(process.env.KWEAVER_TOKEN),
+    hydraAdminUrl: resolveHydraAdminUrl(process.env.KWEAVER_HYDRA_ADMIN_URL),
     isDevelopment: isDevelopmentMode(process.env.NODE_ENV),
     oauthMockUserId: readOptionalString(process.env.OAUTH_MOCK_USER_ID),
     openClawGatewayUrl: gatewayUrl,
@@ -225,7 +225,7 @@ export function resolveBknBackendUrl(value: string | undefined): string {
   const url = new URL(rawValue);
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`BKN_BACKEND_URL must use http or https protocol: ${rawValue}`);
+    throw new Error(`KWEAVER_BASE_URL must use http or https protocol: ${rawValue}`);
   }
 
   url.pathname = "/";
@@ -247,7 +247,7 @@ export function resolveHydraAdminUrl(value: string | undefined): string {
   const url = new URL(rawValue);
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`HYDRA_ADMIN_URL must use http or https protocol: ${rawValue}`);
+    throw new Error(`KWEAVER_HYDRA_ADMIN_URL must use http or https protocol: ${rawValue}`);
   }
 
   url.pathname = "/";
