@@ -55,6 +55,7 @@ const digitalHumanLogic = new DefaultDigitalHumanLogic({
 const UPDATE_KEYS = [
   "name",
   "creature",
+  "icon_id",
   "soul",
   "skills",
   "bkn",
@@ -81,7 +82,7 @@ function parseUpdateRequest(body: unknown): UpdateDigitalHumanRequest {
   if (!hasAny) {
     throw new HttpError(
       400,
-      "At least one of name, creature, soul, skills, bkn, or channel must be provided"
+      "At least one of name, creature, icon_id, soul, skills, bkn, or channel must be provided"
     );
   }
 
@@ -96,6 +97,10 @@ function parseUpdateRequest(body: unknown): UpdateDigitalHumanRequest {
 
   if ("creature" in raw) {
     patch.creature = parseOptionalString(raw.creature);
+  }
+
+  if ("icon_id" in raw) {
+    patch.icon_id = parseOptionalString(raw.icon_id);
   }
 
   if ("soul" in raw) {
@@ -153,6 +158,7 @@ function parseCreateRequest(body: unknown): CreateDigitalHumanRequest {
   return {
     name: raw.name.trim(),
     creature: parseOptionalString(raw.creature),
+    icon_id: parseOptionalString(raw.icon_id),
     soul: parseOptionalString(raw.soul),
     skills: parseStringArray(raw.skills),
     bkn: parseBknArray(raw.bkn),

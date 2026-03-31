@@ -216,6 +216,7 @@ describe("createDigitalHumanRouter", () => {
     expect(createDigitalHuman).toHaveBeenCalledWith({
       name: "slug-name",
       creature: undefined,
+      icon_id: undefined,
       soul: "s",
       skills: undefined,
       bkn: undefined,

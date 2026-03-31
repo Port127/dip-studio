@@ -16,12 +16,18 @@ export interface DigitalHuman {
    * Job position / role label (from IDENTITY.md `Creature`).
    */
   creature?: string;
+
+  /**
+   * Icon identifier (from IDENTITY.md `Icon ID`).
+   */
+  icon_id?: string;
 }
 
 /**
  * Public digital human list response.
+ * Each element has the same shape as the detail response.
  */
-export type DigitalHumanList = DigitalHuman[];
+export type DigitalHumanList = DigitalHumanDetail[];
 
 /**
  * One globally available skill item.
@@ -101,6 +107,11 @@ export interface DigitalHumanTemplate {
      * Job position / role label (maps to IDENTITY.md `Creature`).
      */
     creature?: string;
+
+    /**
+     * Icon identifier (maps to IDENTITY.md `Icon ID`).
+     */
+    icon_id?: string;
   };
 
   /**
@@ -173,6 +184,11 @@ export interface CreateDigitalHumanRequest {
   creature?: string;
 
   /**
+   * Icon identifier (maps to IDENTITY.md `Icon ID`).
+   */
+  icon_id?: string;
+
+  /**
    * Markdown content describing the role persona (written to SOUL.md).
    */
   soul?: string;
@@ -217,6 +233,11 @@ export interface CreateDigitalHumanResult {
   creature?: string;
 
   /**
+   * Icon identifier.
+   */
+  icon_id?: string;
+
+  /**
    * Markdown content describing the role persona.
    */
   soul?: string;
@@ -257,6 +278,11 @@ export interface DigitalHumanDetail {
   creature?: string;
 
   /**
+   * Icon identifier (IDENTITY.md `Icon ID`).
+   */
+  icon_id?: string;
+
+  /**
    * Role persona markdown (SOUL.md body, excluding the BKN table block).
    */
   soul: string;
@@ -293,6 +319,11 @@ export interface UpdateDigitalHumanRequest {
   creature?: string;
 
   /**
+   * Icon identifier (IDENTITY.md `Icon ID`).
+   */
+  icon_id?: string;
+
+  /**
    * Role persona markdown (SOUL.md).
    */
   soul?: string;
@@ -320,6 +351,7 @@ export interface UpdateDigitalHumanResult {
   id: string;
   name: string;
   creature?: string;
+  icon_id?: string;
   soul?: string;
   /** Skill ids currently on the agent (includes built-in defaults when bound). */
   skills?: string[];

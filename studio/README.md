@@ -189,7 +189,12 @@ GitHub：https://github.com/kweaver-ai/web
 | -- | -- | -- |
 | [\].id | string | 数字员工 ID |
 | [\].name | string | 数字员工名称 |
-| [\].avatar | string | 数字员工头像，可选 |
+| [\].creature | string | 岗位/角色，可选 |
+| [\].icon_id | string | 图标 ID，可选 |
+| [\].soul | string | SOUL.md 内容 |
+| [\].bkn | BknEntry[] | 业务知识网络条目，可选 |
+| [\].skills | string[] | 绑定技能列表，可选 |
+| [\].channel | ChannelConfig | 渠道配置，可选 |
 
 #### 获取全局启用技能列表
 
@@ -415,6 +420,7 @@ GitHub：https://github.com/kweaver-ai/web
 | -- | -- | -- | -- |
 | name | string | 是 | 数字员工名称 |
 | creature | string | 否 | 数字员工岗位/角色 |
+| icon_id | string | 否 | 图标 ID |
 | soul | string | 否 | `SOUL.md` 内容 |
 | skills | string[] | 否 | 额外技能名称；服务端始终先绑定 `archive-protocol`、`schedule-plan`、`kweaver-core`，再与本字段合并（去重）。响应中 `skills` 为完整绑定 id 列表（含内置三项） |
 

@@ -39,9 +39,10 @@ components:
 
     DigitalHumanList:
       summary: 数字员工列表
+      description: 每个元素与详情接口返回结构一致
       type: array
       items:
-        $ref: '#/components/schemas/DigitalHuman'
+        $ref: '#/components/schemas/DigitalHumanDetail'
 
     DigitalHuman:
       summary: 数字员工信息
@@ -56,6 +57,9 @@ components:
         creature:
           type: string
           title: 岗位 / 角色（IDENTITY.md Creature）
+        icon_id:
+          type: string
+          title: 图标 ID（IDENTITY.md Icon ID）
       required:
         - id
         - name
@@ -70,6 +74,9 @@ components:
           type: string
         creature:
           type: string
+        icon_id:
+          type: string
+          title: 图标 ID（IDENTITY.md Icon ID）
         soul:
           type: string
         bkn:
@@ -103,6 +110,9 @@ components:
         creature:
           type: string
           title: 岗位 / 角色（IDENTITY.md Creature）
+        icon_id:
+          type: string
+          title: 图标 ID（IDENTITY.md Icon ID）
         soul:
           type: string
           title: SOUL.md 正文
@@ -136,6 +146,9 @@ components:
           type: string
         creature:
           type: string
+        icon_id:
+          type: string
+          title: 图标 ID
         soul:
           type: string
         skills:
@@ -156,7 +169,7 @@ components:
     UpdateDigitalHumanRequest:
       summary: 更新数字员工（部分字段）
       description: |
-        至少提供以下字段之一：`name`、`creature`、`soul`、`skills`、`bkn`、`channel`（仅出现上述键之一即可，其他未知键不计入）。
+        至少提供以下字段之一：`name`、`creature`、`icon_id`、`soul`、`skills`、`bkn`、`channel`（仅出现上述键之一即可，其他未知键不计入）。
         若 `skills` / `bkn` 出现在 body 中，表示**整组替换**（可为空数组以清空）。
       type: object
       properties:
@@ -164,6 +177,9 @@ components:
           type: string
         creature:
           type: string
+        icon_id:
+          type: string
+          title: 图标 ID（IDENTITY.md Icon ID）
         soul:
           type: string
         skills:
@@ -189,6 +205,9 @@ components:
           type: string
         creature:
           type: string
+        icon_id:
+          type: string
+          title: 图标 ID
         soul:
           type: string
         skills:

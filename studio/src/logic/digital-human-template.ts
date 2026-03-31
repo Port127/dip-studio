@@ -35,7 +35,8 @@ export function buildTemplate(
   return {
     identity: {
       name: request.name,
-      creature: request.creature
+      creature: request.creature,
+      icon_id: request.icon_id
     },
     soul: request.soul ?? "",
     bkn: request.bkn
@@ -60,7 +61,8 @@ export function mergeTemplatePatch(
   return {
     identity: {
       name: has("name") ? (patch.name as string) : current.identity.name,
-      creature: has("creature") ? patch.creature : current.identity.creature
+      creature: has("creature") ? patch.creature : current.identity.creature,
+      icon_id: has("icon_id") ? patch.icon_id : current.identity.icon_id
     },
     soul: has("soul") ? (patch.soul ?? "") : current.soul,
     bkn: has("bkn") ? patch.bkn : current.bkn
@@ -92,6 +94,10 @@ export function renderIdentityMarkdown(
   const lines: string[] = ["# IDENTITY.md", ""];
 
   lines.push(`- Name: ${identity.name}`);
+
+  if (identity.icon_id) {
+    lines.push(`- Icon ID: ${identity.icon_id}`);
+  }
 
   if (identity.creature) {
     lines.push(`- Creature: ${identity.creature}`);
@@ -193,6 +199,9 @@ export function parseIdentityMarkdown(
     switch (label) {
       case "name":
         identity.name = value;
+        break;
+      case "icon id":
+        identity.icon_id = value;
         break;
       case "creature":
         identity.creature = value;

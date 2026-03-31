@@ -47,7 +47,7 @@ function stubAgentSkills(overrides?: Partial<AgentSkillsLogic>): AgentSkillsLogi
 }
 
 describe("DefaultDigitalHumanLogic", () => {
-  it("fetches agents and enriches list with IDENTITY.md creature", async () => {
+  it("fetches agents and enriches list with full detail fields", async () => {
     const openClawAgentsAdapter = {
       listAgents: vi.fn().mockResolvedValue({
         defaultId: "main",
@@ -63,29 +63,28 @@ describe("DefaultDigitalHumanLogic", () => {
           }
         ]
       }),
-      getAgentFile: vi.fn().mockResolvedValue({
+      getAgentFile: vi.fn().mockImplementation(async ({ name }: { name: string }) => ({
         file: {
-          content: "# IDENTITY.md\n\n- Name: From File\n- Creature: Engineer\n"
+          content: name === "IDENTITY.md"
+            ? "# IDENTITY.md\n\n- Name: From File\n- Creature: Engineer\n"
+            : "Soul content\n"
         }
-      })
+      }))
     };
     const logic = new DefaultDigitalHumanLogic({
       openClawAgentsAdapter: openClawAgentsAdapter as never,
       agentSkillsLogic: stubAgentSkills()
     });
 
-    await expect(logic.listDigitalHumans()).resolves.toEqual([
-      {
-        id: "agent-1",
-        name: "From File",
-        creature: "Engineer"
-      }
-    ]);
-    expect(openClawAgentsAdapter.listAgents).toHaveBeenCalledOnce();
-    expect(openClawAgentsAdapter.getAgentFile).toHaveBeenCalledWith({
-      agentId: "agent-1",
-      name: "IDENTITY.md"
+    const result = await logic.listDigitalHumans();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "agent-1",
+      name: "From File",
+      creature: "Engineer",
+      soul: "Soul content\n"
     });
+    expect(openClawAgentsAdapter.listAgents).toHaveBeenCalledOnce();
   });
 
   it("filters hidden built-in assistants from the list", async () => {
@@ -109,32 +108,29 @@ describe("DefaultDigitalHumanLogic", () => {
           }
         ]
       }),
-      getAgentFile: vi.fn().mockResolvedValue({
+      getAgentFile: vi.fn().mockImplementation(async ({ name }: { name: string }) => ({
         file: {
-          content: "- Name: Visible Agent\n- Creature: Analyst\n"
+          content: name === "IDENTITY.md"
+            ? "- Name: Visible Agent\n- Creature: Analyst\n"
+            : ""
         }
-      })
+      }))
     };
     const logic = new DefaultDigitalHumanLogic({
       openClawAgentsAdapter: openClawAgentsAdapter as never,
       agentSkillsLogic: stubAgentSkills()
     });
 
-    await expect(logic.listDigitalHumans()).resolves.toEqual([
-      {
-        id: "a1",
-        name: "Visible Agent",
-        creature: "Analyst"
-      }
-    ]);
-    expect(openClawAgentsAdapter.getAgentFile).toHaveBeenCalledTimes(1);
-    expect(openClawAgentsAdapter.getAgentFile).toHaveBeenCalledWith({
-      agentId: "a1",
-      name: "IDENTITY.md"
+    const result = await logic.listDigitalHumans();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "a1",
+      name: "Visible Agent",
+      creature: "Analyst"
     });
   });
 
-  it("list falls back when IDENTITY fetch fails", async () => {
+  it("list falls back when getDigitalHuman fails", async () => {
     const openClawAgentsAdapter = {
       listAgents: vi.fn().mockResolvedValue({
         defaultId: "main",
@@ -158,7 +154,10 @@ describe("DefaultDigitalHumanLogic", () => {
       {
         id: "a1",
         name: "Listed Name",
-        creature: undefined
+        creature: undefined,
+        soul: "",
+        bkn: undefined,
+        skills: undefined
       }
     ]);
   });

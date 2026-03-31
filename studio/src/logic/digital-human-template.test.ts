@@ -20,7 +20,7 @@ describe("buildTemplate", () => {
         bkn: [{ name: "n", url: "u" }]
       })
     ).toEqual({
-      identity: { name: "A", creature: "B" },
+      identity: { name: "A", creature: "B", icon_id: undefined },
       soul: "C",
       bkn: [{ name: "n", url: "u" }]
     });
@@ -74,6 +74,14 @@ describe("parseIdentityMarkdown", () => {
     ).toEqual({ name: "Alice", creature: "Dev" });
   });
 
+  it("parses icon_id from IDENTITY.md", () => {
+    expect(
+      parseIdentityMarkdown(
+        "# IDENTITY.md\n\n- Name: Alice\n- Icon ID: icon-123\n- Creature: Dev\n"
+      )
+    ).toEqual({ name: "Alice", icon_id: "icon-123", creature: "Dev" });
+  });
+
   it("skips lines without values", () => {
     expect(parseIdentityMarkdown("- Name:\n- Name: Z\n")).toEqual({ name: "Z" });
   });
@@ -104,6 +112,16 @@ describe("renderIdentityMarkdown / renderSoulMarkdown", () => {
       soul: ""
     });
     expect(md).toContain("- Name: X");
+    expect(md).toContain("- Creature: Y");
+  });
+
+  it("renders identity with icon_id", () => {
+    const md = renderIdentityMarkdown({
+      identity: { name: "X", icon_id: "ico-1", creature: "Y" },
+      soul: ""
+    });
+    expect(md).toContain("- Name: X");
+    expect(md).toContain("- Icon ID: ico-1");
     expect(md).toContain("- Creature: Y");
   });
 

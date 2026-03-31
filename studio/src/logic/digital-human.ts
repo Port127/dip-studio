@@ -22,7 +22,6 @@ import {
   buildTemplate,
   mergeFilesToTemplate,
   mergeTemplatePatch,
-  parseIdentityMarkdown,
   renderIdentityMarkdown,
   renderSoulMarkdown
 } from "./digital-human-template";
@@ -129,32 +128,14 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
     const visibleAgents = agents.filter((agent) => !HIDDEN_DIGITAL_HUMAN_IDS.has(agent.id));
 
     return Promise.all(
-      visibleAgents.map(async (agent) => {
-        try {
-          const identityResult = await this.openClawAgentsAdapter.getAgentFile({
-            agentId: agent.id,
-            name: "IDENTITY.md"
-          });
-          const identity = parseIdentityMarkdown(
-            identityResult.file.content ?? ""
-          );
-          return {
-            id: agent.id,
-            name:
-              identity.name ||
-              agent.name ||
-              agent.identity?.name ||
-              agent.id,
-            creature: identity.creature
-          };
-        } catch {
-          return {
-            id: agent.id,
-            name: agent.name ?? agent.identity?.name ?? agent.id,
-            creature: undefined
-          };
-        }
-      })
+      visibleAgents.map((agent) => this.getDigitalHuman(agent.id).catch(() => ({
+        id: agent.id,
+        name: agent.name ?? agent.identity?.name ?? agent.id,
+        creature: undefined,
+        soul: "",
+        bkn: undefined,
+        skills: undefined
+      })))
     );
   }
 
@@ -201,6 +182,7 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
       id,
       name: template.identity.name || id,
       creature: template.identity.creature,
+      icon_id: template.identity.icon_id,
       soul: template.soul,
       bkn: template.bkn,
       skills,
@@ -252,6 +234,7 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
       id: uuid,
       name: request.name,
       creature: request.creature,
+      icon_id: request.icon_id,
       soul: request.soul,
       skills,
       bkn: request.bkn,
@@ -339,6 +322,7 @@ export class DefaultDigitalHumanLogic implements DigitalHumanLogic {
       id,
       name: merged.identity.name,
       creature: merged.identity.creature,
+      icon_id: merged.identity.icon_id,
       soul: merged.soul,
       skills: skillsOut,
       bkn: merged.bkn,
