@@ -6,7 +6,7 @@ components:
       properties:
         name:
           type: string
-          title: 技能名称
+          title: 技能 ID（同时作为展示名称，必须与 SKILL.md 中的 name 一致）
         description:
           type: string
           title: 技能描述
@@ -15,9 +15,16 @@ components:
           title: 是否为 DIP 数字员工内置技能
           description: |
             为 `true` 表示属于内置 trio：`archive-protocol`、`schedule-plan`、`kweaver-core`。
+        type:
+          type: string
+          title: 技能来源标识
+          description: |
+            原样透传 OpenClaw `skills.status` 响应中的 `source` 字段，例如 `openclaw-bundled`、
+            `openclaw-managed`、`openclaw-extra`、`agents-skills-personal` 等。未知值会按字符串返回。
       required:
         - name
         - built_in
+        - type
 
     DigitalHumanAgentSkill:
       summary: 数字员工技能状态
@@ -25,7 +32,7 @@ components:
       properties:
         name:
           type: string
-          title: 技能名称
+          title: 技能 ID（与全局列表一致）
         description:
           type: string
           title: 技能描述
@@ -34,9 +41,15 @@ components:
           title: 是否为 DIP 数字员工内置技能
           description: |
             为 `true` 表示属于内置 trio：`archive-protocol`、`schedule-plan`、`kweaver-core`。
+        type:
+          type: string
+          title: 技能来源标识
+          description: |
+            同 `DigitalHumanSkill.type`，值来自 OpenClaw `skills.status` 的 `source` 字段。
       required:
         - name
         - built_in
+        - type
 
     DigitalHumanSkillList:
       summary: 技能列表
@@ -56,13 +69,24 @@ components:
       summary: 安装 .skill 包后的响应
       type: object
       properties:
-        skillName:
+        name:
           type: string
-          title: 技能 ID（与 zip 内顶层目录名一致）
+          title: 技能 ID（来自 SKILL.md 或目录名）
         skillPath:
           type: string
           title: 网关上落盘的绝对路径
       required:
-        - skillName
+        - name
         - skillPath
+      additionalProperties: false
+
+    UninstallSkillResult:
+      summary: 卸载技能后的响应
+      type: object
+      properties:
+        name:
+          type: string
+          title: 已卸载的技能 ID
+      required:
+        - name
       additionalProperties: false

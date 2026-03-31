@@ -1,9 +1,7 @@
 import path from "node:path";
 
 /**
- * Skill helpers: digital-human default slugs / merge, and install-upload filename → skill id.
- * Kept in `utils` so `logic/digital-human` does not pull skill-binding implementation from
- * `logic/agent-skills` for stateless transforms.
+ * Skill helpers: digital-human default slugs / merge, install-upload filename → skill id.
  */
 
 /** Matches DIP `skills-install` slug rules for skill directory names. */
@@ -93,4 +91,17 @@ export function deriveSkillIdFromUploadedFilename(
     return undefined;
   }
   return name;
+}
+
+/**
+ * @param slug Candidate skill id (directory name under `skills/`).
+ * @returns Whether the string matches DIP slug rules.
+ */
+export function isValidSkillSlug(slug: string): boolean {
+  const t = slug.trim();
+  return (
+    t.length > 0 &&
+    isSafeSkillNameSegment(t) &&
+    SKILL_NAME_SLUG_RE.test(t)
+  );
 }

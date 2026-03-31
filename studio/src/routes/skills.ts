@@ -10,8 +10,9 @@ import {
   DefaultOpenClawAgentSkillsHttpClient
 } from "../infra/openclaw-agent-skills-http-client";
 import { OpenClawGatewayClient } from "../infra/openclaw-gateway-client";
-import { DefaultAgentSkillsLogic } from "../logic/agent-skills";
-import { deriveSkillIdFromUploadedFilename } from "../utils/skills";
+import { DefaultAgentSkillsLogic, getSkillEntryName } from "../logic/agent-skills";
+import { deriveSkillIdFromUploadedFilename, isValidSkillSlug } from "../utils/skills";
+import type { OpenClawSkillStatusEntry } from "../types/openclaw";
 
 /** Maximum `.skill` upload size for Studio install route (bytes). */
 const MAX_SKILL_INSTALL_BYTES = 32 * 1024 * 1024;
@@ -113,13 +114,13 @@ function parseOverwriteFromMultipartBody(body: Request["body"]): boolean {
 }
 
 /**
- * Reads optional `skillName` from multipart fields (overrides filename-derived default).
+ * Reads optional `name` from multipart fields (overrides filename-derived default).
  *
  * @param body Parsed `multipart/form-data` fields.
  * @returns Trimmed skill id, or `undefined` when absent or empty.
  */
-function parseSkillNameFromMultipartBody(body: Request["body"]): string | undefined {
-  const raw = body?.skillName as unknown;
+function parseSkillSlugFromMultipartBody(body: Request["body"]): string | undefined {
+  const raw = (body?.skillName ?? body?.name) as unknown;
   if (typeof raw === "string") {
     const t = raw.trim();
     return t.length > 0 ? t : undefined;
@@ -142,12 +143,14 @@ export function createSkillsRouter(): Router {
   router.get(
     "/api/dip-studio/v1/skills",
     async (
-      _request: Request,
+      request: Request,
       response: Response,
       next: NextFunction
     ): Promise<void> => {
       try {
-        const result = await agentSkillsLogic.listEnabledSkills();
+        const nameParam = request.query?.name as string | string[] | undefined;
+        const search = Array.isArray(nameParam) ? nameParam[0] : nameParam;
+        const result = await agentSkillsLogic.listEnabledSkillsByQuery(search);
 
         response.status(200).json(result);
       } catch (error) {
@@ -201,17 +204,32 @@ export function createSkillsRouter(): Router {
           );
         }
 
-        const explicitSkillName = parseSkillNameFromMultipartBody(request.body);
-        const skillName =
-          explicitSkillName ??
-          deriveSkillIdFromUploadedFilename(file.originalname);
+        const explicitSlug = parseSkillSlugFromMultipartBody(request.body);
+        const slug =
+          explicitSlug ?? deriveSkillIdFromUploadedFilename(file.originalname);
 
         const result = await agentSkillsLogic.installSkill(file.buffer, {
           ...(overwrite ? { overwrite: true } : {}),
-          ...(skillName !== undefined ? { skillName } : {})
+          ...(slug !== undefined ? { name: slug } : {})
         });
 
-        response.status(200).json(result);
+        const slugResult = result.name;
+        let displayName = result.displayName ?? slugResult;
+        if (result.displayName === undefined) {
+          try {
+            const matches = await agentSkillsLogic.listEnabledSkillsByQuery(slugResult);
+            if (matches.length > 0) {
+              displayName = matches[0]?.name ?? displayName;
+            }
+          } catch {
+            // ignore errors; fallback to slug
+          }
+        }
+
+        response.status(200).json({
+          name: displayName,
+          skillPath: result.skillPath
+        });
       } catch (error) {
         next(
           error instanceof HttpError
@@ -222,5 +240,67 @@ export function createSkillsRouter(): Router {
     }
   );
 
+  router.delete(
+    "/api/dip-studio/v1/skills/:name",
+    async (
+      request: Request,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const raw = request.params.name;
+        const slug = decodeURIComponent(
+          Array.isArray(raw) ? String(raw[0]) : String(raw ?? "")
+        ).trim();
+
+        if (!isValidSkillSlug(slug)) {
+          throw new HttpError(400, "Path parameter name must be a valid skill id");
+        }
+
+        const deletableEntry = await resolveDeletableSkillEntry(slug);
+        if (deletableEntry === undefined) {
+          throw new HttpError(404, `Skill not found: ${slug}`);
+        }
+
+        if (!canDeleteSkillEntry(deletableEntry)) {
+          throw new HttpError(403, "Skill can only be removed when source is openclaw-managed");
+        }
+
+        const result = await agentSkillsLogic.uninstallSkill(slug);
+        response.status(200).json({ name: result.name });
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to uninstall skill")
+        );
+      }
+    }
+  );
+
   return router;
+}
+
+async function resolveDeletableSkillEntry(name: string): Promise<OpenClawSkillStatusEntry | undefined> {
+  const statuses = await agentSkillsLogic.getSkillStatuses();
+  const normalized = normalizeSkillId(name);
+  if (normalized === undefined) {
+    return undefined;
+  }
+
+  return statuses.find(
+    (entry) => normalizeSkillId(entry.skillKey) === normalized
+  );
+}
+
+function canDeleteSkillEntry(entry: OpenClawSkillStatusEntry): boolean {
+  return entry.source?.trim().toLowerCase() === "openclaw-managed";
+}
+
+function normalizeSkillId(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed.toLowerCase();
 }

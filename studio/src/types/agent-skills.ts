@@ -50,10 +50,25 @@ export interface InstallSkillResult {
   /**
    * Installed skill id (directory name under `skills/`).
    */
-  skillName: string;
+  name: string;
+
+  /**
+   * Optional display name declared in SKILL.md.
+   */
+  displayName?: string;
 
   /**
    * Absolute path written by the plugin (Gateway host filesystem).
    */
   skillPath: string;
+}
+
+/**
+ * Response returned after uninstalling a skill via the DIP Gateway route.
+ */
+export interface UninstallSkillResult {
+  /**
+   * Removed skill id.
+   */
+  name: string;
 }

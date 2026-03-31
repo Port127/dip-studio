@@ -15,7 +15,8 @@ describe("DefaultAgentSkillsLogic", () => {
         listAvailableSkills: vi.fn(),
         getAgentSkills: vi.fn(),
         updateAgentSkills: vi.fn(),
-        installSkill: vi.fn()
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -34,8 +35,8 @@ describe("DefaultAgentSkillsLogic", () => {
     );
 
     await expect(logic.listEnabledSkills()).resolves.toEqual([
-      { name: "planner", description: "plan tasks", built_in: false },
-      { name: "coder", description: "write code", built_in: false }
+      { name: "planner", description: "plan tasks", built_in: false, type: "unknown" },
+      { name: "coder", description: "write code", built_in: false, type: "unknown" }
     ]);
   });
 
@@ -45,7 +46,8 @@ describe("DefaultAgentSkillsLogic", () => {
         listAvailableSkills: vi.fn(),
         getAgentSkills: vi.fn(),
         updateAgentSkills: vi.fn(),
-        installSkill: vi.fn()
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -63,8 +65,84 @@ describe("DefaultAgentSkillsLogic", () => {
     );
 
     await expect(logic.listEnabledSkills()).resolves.toEqual([
-      { name: "archive-protocol", description: "arch", built_in: true },
-      { name: "planner", description: "plan", built_in: false }
+      { name: "archive-protocol", description: "arch", built_in: true, type: "unknown" },
+      { name: "planner", description: "plan", built_in: false, type: "unknown" }
+    ]);
+  });
+
+  it("listEnabledSkillsByQuery filters by slug and name", async () => {
+    const logic = new DefaultAgentSkillsLogic(
+      {
+        listAvailableSkills: vi.fn(),
+        getAgentSkills: vi.fn(),
+        updateAgentSkills: vi.fn(),
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
+      },
+      {
+        listAgents: vi.fn(),
+        createAgent: vi.fn(),
+        deleteAgent: vi.fn(),
+        getAgentFile: vi.fn(),
+        setAgentFile: vi.fn(),
+        getConfig: vi.fn(),
+        patchConfig: vi.fn(),
+        getSkillStatuses: vi.fn().mockResolvedValue([
+          { skillKey: "planner", description: "plan tasks", enabled: true },
+          { skillKey: "writer", description: "write docs", enabled: true }
+        ])
+      } as never
+    );
+
+    await expect(logic.listEnabledSkillsByQuery("wri")).resolves.toEqual([
+      {
+        name: "writer",
+        description: "write docs",
+        built_in: false,
+        type: "unknown"
+      }
+    ]);
+
+    await expect(logic.listEnabledSkillsByQuery("plan")).resolves.toEqual([
+      {
+        name: "planner",
+        description: "plan tasks",
+        built_in: false,
+        type: "unknown"
+      }
+    ]);
+  });
+
+  it("listEnabledSkills prefers gateway source classification when present", async () => {
+    const logic = new DefaultAgentSkillsLogic(
+      {
+        listAvailableSkills: vi.fn(),
+        getAgentSkills: vi.fn(),
+        updateAgentSkills: vi.fn(),
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
+      },
+      {
+        listAgents: vi.fn(),
+        createAgent: vi.fn(),
+        deleteAgent: vi.fn(),
+        getAgentFile: vi.fn(),
+        setAgentFile: vi.fn(),
+        getConfig: vi.fn(),
+        patchConfig: vi.fn(),
+        getSkillStatuses: vi.fn().mockResolvedValue([
+          { skillKey: "excel-xlsx", description: "Excel ops", enabled: true, source: "openclaw-managed" }
+        ])
+      } as never
+    );
+
+    await expect(logic.listEnabledSkills()).resolves.toEqual([
+      {
+        name: "excel-xlsx",
+        description: "Excel ops",
+        built_in: false,
+        type: "openclaw-managed"
+      }
     ]);
   });
 
@@ -83,7 +161,8 @@ describe("DefaultAgentSkillsLogic", () => {
         listAvailableSkills: vi.fn(),
         getAgentSkills,
         updateAgentSkills: vi.fn(),
-        installSkill: vi.fn()
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -101,7 +180,8 @@ describe("DefaultAgentSkillsLogic", () => {
       {
         name: "writer",
         description: "write docs",
-        built_in: false
+        built_in: false,
+        type: "unknown"
       }
     ]);
     expect(getSkillStatuses).toHaveBeenCalledOnce();
@@ -129,7 +209,8 @@ describe("DefaultAgentSkillsLogic", () => {
         listAvailableSkills: vi.fn(),
         getAgentSkills,
         updateAgentSkills: vi.fn(),
-        installSkill: vi.fn()
+        installSkill: vi.fn(),
+        uninstallSkill: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -144,10 +225,10 @@ describe("DefaultAgentSkillsLogic", () => {
     );
 
     await expect(logic.listDigitalHumanSkills("agent-1")).resolves.toEqual([
-      { name: "archive-protocol", description: "arch", built_in: true },
-      { name: "schedule-plan", description: "plan", built_in: true },
-      { name: "kweaver-core", description: "kw", built_in: true },
-      { name: "extra", description: "x", built_in: false }
+      { name: "archive-protocol", description: "arch", built_in: true, type: "unknown" },
+      { name: "schedule-plan", description: "plan", built_in: true, type: "unknown" },
+      { name: "kweaver-core", description: "kw", built_in: true, type: "unknown" },
+      { name: "extra", description: "x", built_in: false, type: "unknown" }
     ]);
   });
 
@@ -158,7 +239,8 @@ describe("DefaultAgentSkillsLogic", () => {
       }),
       getAgentSkills: vi.fn(),
       updateAgentSkills: vi.fn(),
-      installSkill: vi.fn()
+      installSkill: vi.fn(),
+      uninstallSkill: vi.fn()
     });
 
     await expect(logic.listAvailableSkills()).resolves.toEqual({
@@ -174,7 +256,8 @@ describe("DefaultAgentSkillsLogic", () => {
         skills: ["weather"]
       }),
       updateAgentSkills: vi.fn(),
-      installSkill: vi.fn()
+      installSkill: vi.fn(),
+      uninstallSkill: vi.fn()
     });
 
     await expect(logic.getAgentSkills("agent-1")).resolves.toEqual({
@@ -192,7 +275,8 @@ describe("DefaultAgentSkillsLogic", () => {
         agentId: "agent-1",
         skills: ["weather", "search"]
       }),
-      installSkill: vi.fn()
+      installSkill: vi.fn(),
+      uninstallSkill: vi.fn()
     });
 
     await expect(
@@ -206,22 +290,39 @@ describe("DefaultAgentSkillsLogic", () => {
 
   it("delegates installSkill to the client", async () => {
     const installSkill = vi.fn().mockResolvedValue({
-      skillName: "weather",
+      name: "weather",
       skillPath: "/data/skills/weather"
     });
     const logic = new DefaultAgentSkillsLogic({
       listAvailableSkills: vi.fn(),
       getAgentSkills: vi.fn(),
       updateAgentSkills: vi.fn(),
-      installSkill
+      installSkill,
+      uninstallSkill: vi.fn()
     });
 
     const buf = Buffer.from([0x50, 0x4b]);
     await expect(logic.installSkill(buf, { overwrite: true })).resolves.toEqual({
-      skillName: "weather",
+      name: "weather",
       skillPath: "/data/skills/weather"
     });
     expect(installSkill).toHaveBeenCalledWith(buf, { overwrite: true });
+  });
+
+  it("delegates uninstallSkill to the client", async () => {
+    const uninstallSkill = vi.fn().mockResolvedValue({ name: "weather" });
+    const logic = new DefaultAgentSkillsLogic({
+      listAvailableSkills: vi.fn(),
+      getAgentSkills: vi.fn(),
+      updateAgentSkills: vi.fn(),
+      installSkill: vi.fn(),
+      uninstallSkill
+    });
+
+    await expect(logic.uninstallSkill("weather")).resolves.toEqual({
+      name: "weather"
+    });
+    expect(uninstallSkill).toHaveBeenCalledWith("weather");
   });
 
   it("getSkillEntryName prefers name and trims whitespace", () => {
@@ -268,12 +369,14 @@ describe("DefaultAgentSkillsLogic", () => {
       {
         name: "writer",
         description: "write docs",
-        built_in: false
+        built_in: false,
+        type: "unknown"
       },
       {
         name: "coder",
         description: "write code",
-        built_in: false
+        built_in: false,
+        type: "unknown"
       }
     ]);
   });
@@ -288,8 +391,8 @@ describe("DefaultAgentSkillsLogic", () => {
         ["archive-protocol", "extra"]
       )
     ).toEqual([
-      { name: "archive-protocol", description: "a", built_in: true },
-      { name: "extra", description: "e", built_in: false }
+      { name: "archive-protocol", description: "a", built_in: true, type: "unknown" },
+      { name: "extra", description: "e", built_in: false, type: "unknown" }
     ]);
   });
 });

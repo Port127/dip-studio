@@ -8,9 +8,10 @@ import type {
   AgentSkillsBinding,
   AgentSkillsCatalog,
   InstallSkillResult,
+  UninstallSkillResult,
   UpdateAgentSkillsResult
 } from "../types/agent-skills";
-import type { OpenClawSkillStatusEntry } from "../types/openclaw";
+import type { OpenClawSkillStatusEntry, SkillOriginType } from "../types/openclaw";
 import { isDefaultDigitalHumanSkillSlug } from "../utils/skills";
 
 /**
@@ -21,6 +22,13 @@ export interface AgentSkillsLogic {
    * Lists globally enabled skills exposed by OpenClaw.
    */
   listEnabledSkills(): Promise<DigitalHumanSkillList>;
+
+  /**
+   * Lists globally enabled skills filtered by an optional name substring.
+   *
+   * @param name Optional substring matched case-insensitively against slug/name.
+   */
+  listEnabledSkillsByQuery(name?: string): Promise<DigitalHumanSkillList>;
 
   /**
    * Lists one agent's enabled skills after intersecting global availability
@@ -61,8 +69,20 @@ export interface AgentSkillsLogic {
    */
   installSkill(
     zipBody: Buffer,
-    options?: { overwrite?: boolean; skillName?: string }
+    options?: { overwrite?: boolean; name?: string }
   ): Promise<InstallSkillResult>;
+
+  /**
+   * Uninstalls a skill from the gateway repository `skills/` tree.
+   *
+   * @param name Skill id to remove.
+   */
+  uninstallSkill(name: string): Promise<UninstallSkillResult>;
+
+  /**
+   * Lists raw skill status entries returned by OpenClaw.
+   */
+  getSkillStatuses(): Promise<OpenClawSkillStatusEntry[]>;
 }
 
 /**
@@ -88,14 +108,7 @@ export class DefaultAgentSkillsLogic implements AgentSkillsLogic {
   public async listEnabledSkills(): Promise<DigitalHumanSkillList> {
     const globalEntries = await this.getAvailableSkillEntries();
 
-    return globalEntries.map((entry) => {
-      const name = getSkillEntryName(entry) ?? entry.skillKey;
-      return {
-        name,
-        description: getSkillEntryDescription(entry),
-        built_in: isDefaultDigitalHumanSkillSlug(name)
-      };
-    });
+    return globalEntries.map((entry) => this.mapEntryToSkill(entry));
   }
 
   /**
@@ -156,9 +169,54 @@ export class DefaultAgentSkillsLogic implements AgentSkillsLogic {
    */
   public async installSkill(
     zipBody: Buffer,
-    options?: { overwrite?: boolean; skillName?: string }
+    options?: { overwrite?: boolean; name?: string }
   ): Promise<InstallSkillResult> {
     return this.client.installSkill(zipBody, options);
+  }
+
+  /**
+   * Removes a skill directory via the Gateway plugin HTTP route.
+   *
+   * @param name Skill id (slug).
+   * @returns The plugin uninstall payload.
+   */
+  public async uninstallSkill(name: string): Promise<UninstallSkillResult> {
+    return this.client.uninstallSkill(name);
+  }
+
+  public async listEnabledSkillsByQuery(name?: string): Promise<DigitalHumanSkillList> {
+    const normalized = name?.trim().toLowerCase();
+    const entries = await this.getAvailableSkillEntries();
+
+    if (normalized === undefined || normalized.length === 0) {
+      return entries.map((entry) => this.mapEntryToSkill(entry));
+    }
+
+    const filtered = entries.filter((entry) => {
+      const slugMatch = entry.skillKey.toLowerCase().includes(normalized);
+      const display = getSkillEntryName(entry)?.toLowerCase();
+      const desc = getSkillEntryDescription(entry)?.toLowerCase();
+      return (
+        slugMatch ||
+        (display?.includes(normalized) ?? false) ||
+        (desc?.includes(normalized) ?? false)
+      );
+    });
+
+    return filtered.map((entry) => this.mapEntryToSkill(entry));
+  }
+
+  /**
+   * Lists all skill status entries returned by OpenClaw.
+   *
+   * @returns Normalized skill status entries.
+   */
+  public async getSkillStatuses(): Promise<OpenClawSkillStatusEntry[]> {
+    if (this.openClawAgentsAdapter === undefined) {
+      throw new Error("OpenClaw agents adapter is required for skill status queries");
+    }
+
+    return this.openClawAgentsAdapter.getSkillStatuses();
   }
 
   /**
@@ -175,6 +233,32 @@ export class DefaultAgentSkillsLogic implements AgentSkillsLogic {
 
     return mapAvailableSkillEntries(globalEntries);
   }
+
+  private mapEntryToSkill(entry: OpenClawSkillStatusEntry): DigitalHumanSkill {
+    const name = getSkillEntryName(entry) ?? entry.skillKey;
+    return {
+      name,
+      description: getSkillEntryDescription(entry),
+      built_in: isDefaultDigitalHumanSkillSlug(entry.skillKey),
+      type: resolveSkillEntryOriginType(entry)
+    };
+  }
+}
+
+/**
+ * Resolves the public `type` field from a normalized OpenClaw entry.
+ *
+ * @param entry The normalized OpenClaw skill entry.
+ * @returns The skill origin classification.
+ */
+export function resolveSkillEntryOriginType(
+  entry: OpenClawSkillStatusEntry
+): SkillOriginType {
+  if (entry.source !== undefined && entry.source.trim().length > 0) {
+    return entry.source;
+  }
+
+  return entry.skillOriginType ?? "unknown";
 }
 
 /**
@@ -228,21 +312,22 @@ export function filterAgentSkillEntries(
   availableEntries: OpenClawSkillStatusEntry[],
   agentSkillNames: string[]
 ): DigitalHumanAgentSkillList {
-  const allowedNames = new Set(
+  const allowedSlugs = new Set(
     agentSkillNames.map((name) => name.trim()).filter((name) => name.length > 0)
   );
 
   return availableEntries.flatMap((entry) => {
     const name = getSkillEntryName(entry);
 
-    if (name === undefined || !allowedNames.has(name)) {
+    if (name === undefined || !allowedSlugs.has(entry.skillKey)) {
       return [];
     }
 
     return [{
       name,
       description: getSkillEntryDescription(entry),
-      built_in: isDefaultDigitalHumanSkillSlug(name)
+      built_in: isDefaultDigitalHumanSkillSlug(entry.skillKey),
+      type: resolveSkillEntryOriginType(entry)
     }];
   });
 }

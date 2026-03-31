@@ -3,6 +3,7 @@ import type {
   AgentSkillsBinding,
   AgentSkillsCatalog,
   InstallSkillResult,
+  UninstallSkillResult,
   UpdateAgentSkillsResult
 } from "../types/agent-skills";
 
@@ -66,8 +67,15 @@ export interface OpenClawAgentSkillsHttpClient {
    */
   installSkill(
     zipBody: Buffer | Uint8Array,
-    options?: { overwrite?: boolean; skillName?: string }
+    options?: { overwrite?: boolean; name?: string }
   ): Promise<InstallSkillResult>;
+
+  /**
+   * Uninstalls a skill directory under the gateway repository `skills/` tree.
+   *
+   * @param name Skill id to remove.
+   */
+  uninstallSkill(name: string): Promise<UninstallSkillResult>;
 }
 
 /**
@@ -171,7 +179,7 @@ implements OpenClawAgentSkillsHttpClient {
    */
   public async installSkill(
     zipBody: Buffer | Uint8Array,
-    options?: { overwrite?: boolean; skillName?: string }
+    options?: { overwrite?: boolean; name?: string }
   ): Promise<InstallSkillResult> {
     const response = await this.fetchImpl(
       buildOpenClawSkillInstallUrl(this.options.gatewayUrl, options),
@@ -189,6 +197,30 @@ implements OpenClawAgentSkillsHttpClient {
     }
 
     return (await response.json()) as InstallSkillResult;
+  }
+
+  /**
+   * Removes an installed skill via the Gateway plugin HTTP route.
+   *
+   * @param name Skill id (slug).
+   * @returns Parsed uninstall payload from the plugin.
+   */
+  public async uninstallSkill(name: string): Promise<UninstallSkillResult> {
+    const response = await this.fetchImpl(
+      buildOpenClawSkillUninstallUrl(this.options.gatewayUrl, name),
+      {
+        method: "DELETE",
+        headers: createOpenClawAgentSkillsHeaders(this.options.token)
+      }
+    ).catch((error: unknown) => {
+      throw normalizeOpenClawSkillUninstallError(error);
+    });
+
+    if (!response.ok) {
+      throw await createOpenClawSkillUninstallStatusError(response);
+    }
+
+    return (await response.json()) as UninstallSkillResult;
   }
 }
 
@@ -231,7 +263,7 @@ export function buildOpenClawAgentSkillsUrl(
  */
 export function buildOpenClawSkillInstallUrl(
   gatewayUrl: string,
-  options?: { overwrite?: boolean; skillName?: string }
+  options?: { overwrite?: boolean; name?: string }
 ): string {
   const url = new URL(gatewayUrl);
 
@@ -247,9 +279,36 @@ export function buildOpenClawSkillInstallUrl(
   if (options?.overwrite === true) {
     url.searchParams.set("overwrite", "true");
   }
-  if (options?.skillName !== undefined && options.skillName.trim().length > 0) {
-    url.searchParams.set("skillName", options.skillName.trim());
+  if (options?.name !== undefined && options.name.trim().length > 0) {
+    url.searchParams.set("name", options.name.trim());
   }
+
+  return url.toString();
+}
+
+/**
+ * Builds the OpenClaw `dip` plugin skill uninstall endpoint URL.
+ *
+ * @param gatewayUrl The configured OpenClaw gateway HTTP URL.
+ * @param name Skill id to remove.
+ * @returns The derived HTTP endpoint URL.
+ */
+export function buildOpenClawSkillUninstallUrl(
+  gatewayUrl: string,
+  name: string
+): string {
+  const url = new URL(gatewayUrl);
+
+  if (url.protocol === "ws:") {
+    url.protocol = "http:";
+  } else if (url.protocol === "wss:") {
+    url.protocol = "https:";
+  }
+
+  const trimmed = name.trim();
+  url.pathname = `/v1/config/agents/skills/${encodeURIComponent(trimmed)}`;
+  url.hash = "";
+  url.search = "";
 
   return url.toString();
 }
@@ -372,5 +431,43 @@ export function normalizeOpenClawSkillInstallError(error: unknown): HttpError {
   return new HttpError(
     502,
     `Failed to communicate with OpenClaw /v1/config/agents/skills/install: ${description}`
+  );
+}
+
+/**
+ * Converts an upstream non-2xx uninstall response into an application error.
+ *
+ * @param response Upstream fetch response.
+ * @returns A typed HTTP error.
+ */
+export async function createOpenClawSkillUninstallStatusError(
+  response: Response
+): Promise<HttpError> {
+  const text = (await response.text()).trim();
+  const detail = text.length > 0 ? `: ${text}` : "";
+
+  return new HttpError(
+    502,
+    `OpenClaw /v1/config/agents/skills/{name} returned HTTP ${response.status}${detail}`
+  );
+}
+
+/**
+ * Normalizes transport errors produced while calling the uninstall route.
+ *
+ * @param error Unknown thrown value.
+ * @returns A typed application error.
+ */
+export function normalizeOpenClawSkillUninstallError(error: unknown): HttpError {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const description =
+    error instanceof Error ? error.message : "Unknown upstream error";
+
+  return new HttpError(
+    502,
+    `Failed to communicate with OpenClaw /v1/config/agents/skills/{name}: ${description}`
   );
 }

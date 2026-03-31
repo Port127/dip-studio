@@ -7,6 +7,11 @@ import {
   SkillInstallError,
   skillInstallErrorHttpStatus
 } from "./skills-install";
+import {
+  SkillUninstallError,
+  skillUninstallErrorHttpStatus,
+  uninstallSkillFromRepo
+} from "./skills-uninstall";
 
 /** Maximum `.skill` upload size for the Gateway install route (bytes). */
 const MAX_SKILL_INSTALL_BYTES = 32 * 1024 * 1024;
@@ -47,7 +52,8 @@ function readRequestBodyLimited(
 }
 
 /**
- * Registers skills CLI command, `/v1/config/agents/skills/install`, and `/v1/config/agents/skills` HTTP routes.
+ * Registers skills CLI command, `/v1/config/agents/skills/install`, `/v1/config/agents/skills/{name}`,
+ * and `/v1/config/agents/skills` HTTP routes.
  *
  * @param api OpenClaw plugin API.
  * @param repoRoot Repository / studio root (parent of `skills/`).
@@ -78,10 +84,10 @@ export function registerSkillsControl(
 
       const url = new URL(req.url || "", "http://localhost");
       const overwrite = url.searchParams.get("overwrite") === "true";
-      const skillNameParam = url.searchParams.get("skillName");
-      const skillName =
-        skillNameParam !== null && skillNameParam.trim().length > 0
-          ? skillNameParam.trim()
+      const nameParam = url.searchParams.get("name");
+      const name =
+        nameParam !== null && nameParam.trim().length > 0
+          ? nameParam.trim()
           : undefined;
 
       try {
@@ -89,13 +95,13 @@ export function registerSkillsControl(
         const result = installSkillFromZipBuffer(body, repoSkillsDir, {
           overwrite,
           maxBytes: MAX_SKILL_INSTALL_BYTES,
-          skillName
+          name
         });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
         res.end(
           JSON.stringify({
-            skillName: result.skillName,
+            name: result.name,
             skillPath: result.skillPath
           })
         );
@@ -108,6 +114,66 @@ export function registerSkillsControl(
           return true;
         }
         api.logger.error?.(`dip skills install failed: ${String(e)}`);
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            error: e instanceof Error ? e.message : String(e)
+          })
+        );
+        return true;
+      }
+    }
+  });
+
+  api.registerHttpRoute({
+    path: "/v1/config/agents/skills/",
+    match: "prefix",
+    auth: "gateway",
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      if (req.method !== "DELETE") {
+        res.statusCode = 405;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            error: "Method not allowed. Use DELETE with ?name=<id>."
+          })
+        );
+        return true;
+      }
+
+      const url = new URL(req.url || "", "http://localhost");
+      const name = extractSkillNameFromPath(url.pathname);
+
+      if (name === undefined) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            error: "Path parameter name is required"
+          })
+        );
+        return true;
+      }
+
+      try {
+        const result = uninstallSkillFromRepo(
+          name,
+          repoSkillsDir,
+          bundledSkillsDir
+        );
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ name: result.name }));
+        return true;
+      } catch (e: unknown) {
+        if (e instanceof SkillUninstallError) {
+          res.statusCode = skillUninstallErrorHttpStatus(e.code);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: e.message, code: e.code }));
+          return true;
+        }
+        api.logger.error?.(`dip skills uninstall failed: ${String(e)}`);
         res.statusCode = 500;
         res.setHeader("Content-Type", "application/json");
         res.end(
@@ -259,4 +325,25 @@ export function registerSkillsControl(
       return true;
     }
   });
+}
+
+function extractSkillNameFromPath(pathname: string | null): string | undefined {
+  if (!pathname) {
+    return undefined;
+  }
+
+  const normalized = pathname.replace(/\/+$/, "");
+  const prefix = "/v1/config/agents/skills";
+
+  if (normalized.length <= prefix.length || !normalized.startsWith(prefix)) {
+    return undefined;
+  }
+
+  const suffix = normalized.slice(prefix.length);
+  if (!suffix.startsWith("/")) {
+    return undefined;
+  }
+
+  const name = suffix.slice(1);
+  return name.length > 0 ? decodeURIComponent(name) : undefined;
 }

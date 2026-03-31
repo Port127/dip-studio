@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type {
   OpenClawAgentsCreateParams,
   OpenClawAgentsCreateResult,
@@ -16,8 +19,10 @@ import type {
   OpenClawGatewayPort,
   OpenClawRequestFrame,
   OpenClawSkillStatusEntry,
-  OpenClawSkillsStatusParams
+  OpenClawSkillsStatusParams,
+  SkillOriginType
 } from "../types/openclaw";
+import type { SkillOriginType } from "../types/openclaw";
 
 /**
  * Outbound adapter used to manage OpenClaw agents through the gateway port.
@@ -240,8 +245,11 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
    * Creates the adapter.
    *
    * @param gatewayPort The OpenClaw Gateway RPC port.
+   * @param skillOriginContext Optional host paths used to classify `skills.status` entries.
    */
-  public constructor(private readonly gatewayPort: OpenClawGatewayPort) {}
+  public constructor(
+    private readonly gatewayPort: OpenClawGatewayPort
+  ) {}
 
   /**
    * Queries `agents.list` over the gateway RPC port.
@@ -337,7 +345,7 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
       createSkillsStatusRequest(params)
     );
 
-    return normalizeSkillStatusEntries(result);
+    return normalizeSkillStatusesFromRpcResult(result);
   }
 
   /**
@@ -367,17 +375,70 @@ export class OpenClawAgentsGatewayAdapter implements OpenClawAgentsAdapter {
 }
 
 /**
- * Normalizes the loosely typed `skills.status` payload to a flat entry list.
+ * Parses `skills.status` RPC payload, resolves each entry's final `skillPath`, then infers
+ * {@link OpenClawSkillStatusEntry.skillOriginType} only when both path and host context exist.
  *
- * @param result The raw RPC payload.
- * @returns The normalized skill status entries.
+ * @param result Raw gateway payload.
+ * @param skillOriginContext Resolved home + workspace for classification; omit for tests.
+ */
+export function normalizeSkillStatusesFromRpcResult(
+  result: unknown
+): OpenClawSkillStatusEntry[] {
+  return parseAndNormalizeSkillStatusEntries(result, {});
+}
+
+/**
+ * Back-compat: path normalization only (no `skillOriginType`).
+ *
+ * @param result Raw `skills.status` payload.
  */
 export function normalizeSkillStatusEntries(
   result: unknown
 ): OpenClawSkillStatusEntry[] {
+  return parseAndNormalizeSkillStatusEntries(result, {});
+}
+
+/**
+ * Same as {@link attachSkillOriginTypesAfterPathsResolved} (legacy name).
+ */
+export function enrichSkillEntriesWithOrigin(
+  entries: OpenClawSkillStatusEntry[]
+): OpenClawSkillStatusEntry[] {
+  return entries;
+}
+
+/** RPC envelope keys that are not per-skill entries (see `skills.status` response shape). */
+const SKILLS_STATUS_ENVELOPE_KEYS = new Set([
+  "bins",
+  "diagnostics",
+  "installRoot",
+  "skillsRoot",
+  "skillRoot",
+  "skillsInstallRoot",
+  "skillsDir",
+  "skillStorePath",
+  "skillsPath",
+  "workspaceDir",
+  "managedSkillsDir",
+  "skills",
+  "entries",
+  "items"
+]);
+
+/**
+ * Resolves full `skillPath` from the raw RPC (envelope `installRoot`, nested fields, etc.).
+ * Does not set `skillOriginType` — call {@link attachSkillOriginTypesAfterPathsResolved} after.
+ *
+ * @param result Raw payload.
+ * @param options Optional `installRoot` override (tests).
+ */
+export function parseAndNormalizeSkillStatusEntries(
+  result: unknown,
+  options: { installRoot?: string } = {}
+): OpenClawSkillStatusEntry[] {
   if (Array.isArray(result)) {
     return result
-      .map((entry) => normalizeSkillStatusEntry(entry))
+      .map((entry) => normalizeSkillStatusEntry(entry, undefined, options))
       .filter((entry): entry is OpenClawSkillStatusEntry => entry !== undefined);
   }
 
@@ -385,21 +446,71 @@ export function normalizeSkillStatusEntries(
     return [];
   }
 
+  const top = result as Record<string, unknown>;
+  const installRoot =
+    options.installRoot ?? readTopLevelSkillInstallRoot(top);
+
+  const mergedOptions: NormalizeSkillStatusEntryOptions = { installRoot };
+
   for (const collectionKey of ["skills", "entries", "items"]) {
-    const collection = (result as Record<string, unknown>)[collectionKey];
+    const collection = top[collectionKey];
 
     if (Array.isArray(collection)) {
       return collection
-        .map((entry) => normalizeSkillStatusEntry(entry))
+        .map((entry) => normalizeSkillStatusEntry(entry, undefined, mergedOptions))
         .filter((entry): entry is OpenClawSkillStatusEntry => entry !== undefined);
     }
   }
 
-  return Object.entries(result).flatMap(([skillKey, value]) => {
-    const normalized = normalizeSkillStatusEntry(value, skillKey);
+  return Object.entries(top).flatMap(([skillKey, value]) => {
+    if (SKILLS_STATUS_ENVELOPE_KEYS.has(skillKey)) {
+      return [];
+    }
+
+    const normalized = normalizeSkillStatusEntry(value, skillKey, mergedOptions);
 
     return normalized === undefined ? [] : [normalized];
   });
+}
+
+function readTopLevelSkillInstallRoot(top: Record<string, unknown>): string | undefined {
+  const direct = readFirstString(
+    top.installRoot,
+    top.skillsRoot,
+    top.skillRoot,
+    top.skillsInstallRoot,
+    top.skillsDir,
+    top.skillStorePath,
+    top.skillsPath
+  );
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const bins = top.bins;
+
+  if (Array.isArray(bins)) {
+    for (const bin of bins) {
+      if (typeof bin === "object" && bin !== null) {
+        const b = bin as Record<string, unknown>;
+        const p = readFirstString(b.path, b.root, b.dir, b.skillsDir);
+
+        if (p !== undefined) {
+          return p;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Optional context from the `skills.status` RPC envelope for path inference.
+ */
+export interface NormalizeSkillStatusEntryOptions {
+  installRoot?: string;
 }
 
 /**
@@ -407,11 +518,13 @@ export function normalizeSkillStatusEntries(
  *
  * @param candidate The raw status entry.
  * @param fallbackKey The fallback skill key derived from object keys.
+ * @param options Envelope `installRoot` for path join when entry omits a path.
  * @returns The normalized entry, or `undefined` when it cannot be parsed.
  */
 export function normalizeSkillStatusEntry(
   candidate: unknown,
-  fallbackKey?: string
+  fallbackKey?: string,
+  options: NormalizeSkillStatusEntryOptions = {}
 ): OpenClawSkillStatusEntry | undefined {
   if (typeof candidate === "boolean") {
     if (fallbackKey === undefined) {
@@ -421,7 +534,8 @@ export function normalizeSkillStatusEntry(
     return {
       skillKey: fallbackKey,
       name: fallbackKey,
-      enabled: candidate
+      enabled: candidate,
+      ...deriveSkillPathFields(fallbackKey, undefined, options)
     };
   }
 
@@ -431,7 +545,8 @@ export function normalizeSkillStatusEntry(
       : {
           skillKey: fallbackKey,
           name: fallbackKey,
-          enabled: undefined
+          enabled: undefined,
+          ...deriveSkillPathFields(fallbackKey, undefined, options)
         };
   }
 
@@ -442,6 +557,9 @@ export function normalizeSkillStatusEntry(
     return undefined;
   }
 
+  const skillPath = resolveSkillDirectoryPath(skillKey, raw, options);
+  const source = readFirstString(raw.source);
+
   return {
     skillKey,
     name: readFirstString(raw.name, raw.skillName, raw.skill, skillKey),
@@ -451,8 +569,129 @@ export function normalizeSkillStatusEntry(
       raw.summary,
       raw.prompt
     ),
-    enabled: readEnabledFlag(raw)
+    enabled: readEnabledFlag(raw),
+    ...(skillPath !== undefined ? { skillPath } : {}),
+    ...(source !== undefined ? { source } : {}),
+    ...readSkillOriginType(raw.skillOriginType)
   };
+}
+
+function resolveSkillDirectoryPath(
+  skillKey: string,
+  raw: Record<string, unknown>,
+  options: NormalizeSkillStatusEntryOptions
+): string | undefined {
+  const fromEntry = readFirstSkillPathDeep(raw);
+
+  if (fromEntry !== undefined) {
+    return fromEntry;
+  }
+
+  return derivePathFromInstallRoot(skillKey, options.installRoot);
+}
+
+function deriveSkillPathFields(
+  skillKey: string,
+  raw: Record<string, unknown> | undefined,
+  options: NormalizeSkillStatusEntryOptions
+): { skillPath?: string } {
+  const fromEntry =
+    raw === undefined ? undefined : readFirstSkillPathDeep(raw);
+  const skillPath =
+    fromEntry ?? derivePathFromInstallRoot(skillKey, options.installRoot);
+
+  return skillPath !== undefined ? { skillPath } : {};
+}
+
+function derivePathFromInstallRoot(
+  skillKey: string,
+  installRoot: string | undefined
+): string | undefined {
+  if (installRoot === undefined || installRoot.trim().length === 0) {
+    return undefined;
+  }
+
+  return path.join(installRoot.trim(), skillKey.trim());
+}
+
+function readFirstSkillPathDeep(raw: Record<string, unknown>): string | undefined {
+  const direct = readFirstString(
+    raw.path,
+    raw.skillPath,
+    raw.dir,
+    raw.skillDir,
+    raw.root,
+    raw.location,
+    raw.file,
+    raw.folder,
+    raw.diskPath,
+    raw.localPath,
+    raw.absolutePath,
+    raw.fsPath,
+    raw.workspacePath,
+    raw.home,
+    raw.resolvedPath,
+    raw.installPath,
+    raw.basePath,
+    raw.directory,
+    raw.folderPath,
+    raw.uri,
+    raw.baseDir,
+    raw.baseDirectory,
+    raw.skillBaseDir,
+    raw.filePath
+  );
+
+  if (direct !== undefined) {
+    return normalizeSkillDirCandidate(direct);
+  }
+
+  for (const nestedKey of [
+    "meta",
+    "info",
+    "source",
+    "config",
+    "detail",
+    "details",
+    "location",
+    "data"
+  ]) {
+    const value = raw[nestedKey];
+
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const nested = readFirstSkillPathDeep(value as Record<string, unknown>);
+
+      if (nested !== undefined) {
+        return normalizeSkillDirCandidate(nested);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function stripFileUriIfNeeded(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("file:")) {
+    return trimmed;
+  }
+
+  try {
+    return fileURLToPath(trimmed);
+  } catch {
+    return trimmed.replace(/^file:\/\//, "");
+  }
+}
+
+function normalizeSkillDirCandidate(value: string): string {
+  const stripped = stripFileUriIfNeeded(value);
+  const base = path.basename(stripped).toLowerCase();
+  if (base === "skill.md") {
+    return path.dirname(stripped);
+  }
+
+  return stripped;
 }
 
 /**
@@ -509,4 +748,15 @@ function readEnabledFlag(candidate: Record<string, unknown>): boolean | undefine
   }
 
   return undefined;
+}
+
+function readSkillOriginType(
+  candidate: unknown
+): { skillOriginType: SkillOriginType } | undefined {
+  if (typeof candidate !== "string") {
+    return undefined;
+  }
+
+  const normalized = candidate.trim();
+  return normalized.length > 0 ? { skillOriginType: normalized } : undefined;
 }

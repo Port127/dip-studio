@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import path from "node:path";
+
 import {
   createAgentsCreateRequest,
   createAgentsDeleteRequest,
@@ -202,13 +204,65 @@ describe("OpenClawAgentsGatewayAdapter", () => {
         skillKey: "planner",
         name: "planner",
         description: undefined,
-        enabled: true
+        enabled: true,
+        skillOriginType: undefined
       }
     ]);
 
     expect(gatewayPort.invoke).toHaveBeenCalledWith(
       createSkillsStatusRequest({})
     );
+  });
+
+  it("includes skillPath when gateway provides it", async () => {
+    const gatewayPort = {
+      invoke: vi.fn().mockResolvedValue({
+        skills: [
+          {
+            skillKey: "ws-skill",
+            path: "/Users/h/agent-workspace/skills/ws-skill",
+            enabled: true
+          }
+        ]
+      })
+    };
+    const adapter = new OpenClawAgentsGatewayAdapter(gatewayPort);
+
+    await expect(adapter.getSkillStatuses()).resolves.toEqual([
+      {
+        skillKey: "ws-skill",
+        name: "ws-skill",
+        description: undefined,
+        enabled: true,
+        skillPath: "/Users/h/agent-workspace/skills/ws-skill",
+        skillOriginType: undefined
+      }
+    ]);
+  });
+
+  it("preserves upstream skillOriginType when inference yields unknown", async () => {
+    const gatewayPort = {
+      invoke: vi.fn().mockResolvedValue({
+        skills: [
+          {
+            skillKey: "managed-skill",
+            enabled: true,
+            skillOriginType: "managed"
+          }
+        ]
+      })
+    };
+    const adapter = new OpenClawAgentsGatewayAdapter(gatewayPort);
+
+    await expect(adapter.getSkillStatuses()).resolves.toEqual([
+      {
+        skillKey: "managed-skill",
+        name: "managed-skill",
+        description: undefined,
+        enabled: true,
+        skillOriginType: "managed"
+      }
+    ]);
   });
 
   it("delegates skills.status with agentId to the gateway port", async () => {
@@ -282,6 +336,135 @@ describe("createSkillsStatusRequest", () => {
 });
 
 describe("normalizeSkillStatusEntries", () => {
+  it("joins top-level installRoot with skillKey when entry has no path", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        installRoot: "/data/openclaw/skills-root",
+        skills: [{ skillKey: "weather", enabled: true }]
+      })
+    ).toEqual([
+      {
+        skillKey: "weather",
+        name: "weather",
+        description: undefined,
+        enabled: true,
+        skillPath: path.join("/data/openclaw/skills-root", "weather")
+      }
+    ]);
+  });
+
+  it("retains upstream skillOriginType when provided by the gateway", () => {
+    expect(
+      normalizeSkillStatusEntries([
+        {
+          skillKey: "planner",
+          skillOriginType: "workspace"
+        }
+      ])
+    ).toEqual([
+      {
+        skillKey: "planner",
+        name: "planner",
+        description: undefined,
+        enabled: undefined,
+        skillOriginType: "workspace"
+      }
+    ]);
+  });
+
+  it("parses baseDir and filePath fields from the gateway payload", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        workspaceDir: "/Users/test/.openclaw/workspace",
+        managedSkillsDir: "/Users/test/.openclaw/skills",
+        skills: [
+          {
+            skillKey: "feishu-doc",
+            baseDir: "/repo/extensions/feishu/skills/feishu-doc",
+            filePath: "/repo/extensions/feishu/skills/feishu-doc/SKILL.md"
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        skillKey: "feishu-doc",
+        name: "feishu-doc",
+        description: undefined,
+        enabled: undefined,
+        skillPath: "/repo/extensions/feishu/skills/feishu-doc"
+      }
+    ]);
+  });
+
+  it("reads nested meta.path for skill directory", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        skills: [
+          {
+            skillKey: "k",
+            enabled: true,
+            meta: { path: "/repo/skills/k" }
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        skillKey: "k",
+        name: "k",
+        description: undefined,
+        enabled: true,
+        skillPath: "/repo/skills/k"
+      }
+    ]);
+  });
+
+  it("ignores envelope-only keys when falling back to keyed map", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        installRoot: "/r",
+        bins: [{ name: "b", path: "/bin" }],
+        diagnostics: []
+      })
+    ).toEqual([]);
+  });
+
+  it("uses first bins[].path as install root when installRoot is absent", () => {
+    expect(
+      normalizeSkillStatusEntries({
+        bins: [{ name: "default", path: "/gw/store" }],
+        skills: [{ skillKey: "weather", enabled: true }]
+      })
+    ).toEqual([
+      {
+        skillKey: "weather",
+        name: "weather",
+        description: undefined,
+        enabled: true,
+        skillPath: path.join("/gw/store", "weather")
+      }
+    ]);
+  });
+
+  it("captures filesystem paths from gateway payloads", () => {
+    expect(
+      normalizeSkillStatusEntries([
+        {
+          skillKey: "a",
+          path: "/tmp/skills/a",
+          enabled: true
+        }
+      ])
+    ).toEqual([
+      {
+        skillKey: "a",
+        name: "a",
+        description: undefined,
+        enabled: true,
+        skillPath: "/tmp/skills/a"
+      }
+    ]);
+  });
+
   it("normalizes array payloads", () => {
     expect(
       normalizeSkillStatusEntries([

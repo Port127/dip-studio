@@ -38,7 +38,7 @@ function createResponseDouble(): Response {
  */
 function findHandler(
   router: Router,
-  method: "get" | "post",
+  method: "get" | "post" | "delete",
   path: string
 ):
   | ((
@@ -102,16 +102,27 @@ function createMultipartSkillRequest(
 async function importRouterWithLogicMock(
   logic: {
     listEnabledSkills: () => Promise<unknown>;
+    listEnabledSkillsByQuery?: (name?: string) => Promise<unknown>;
     listDigitalHumanSkills?: (id: string) => Promise<unknown>;
     installSkill?: (
       body: Buffer,
-      options?: { overwrite?: boolean }
+      options?: { overwrite?: boolean; name?: string }
     ) => Promise<unknown>;
+    uninstallSkill?: (name: string) => Promise<unknown>;
+    getSkillStatuses?: () => Promise<
+      Array<{
+        skillKey: string;
+        source?: string;
+        skillPath?: string;
+      }>
+    >;
   }
 ): Promise<typeof import("./skills")> {
   vi.doMock("../logic/agent-skills", () => ({
     DefaultAgentSkillsLogic: vi.fn().mockImplementation(() => ({
       listEnabledSkills: logic.listEnabledSkills,
+      listEnabledSkillsByQuery:
+        logic.listEnabledSkillsByQuery ?? logic.listEnabledSkills,
       listDigitalHumanSkills:
         logic.listDigitalHumanSkills ?? vi.fn().mockResolvedValue([]),
       listAvailableSkills: vi.fn().mockResolvedValue({ skills: [] }),
@@ -120,9 +131,21 @@ async function importRouterWithLogicMock(
       installSkill:
         logic.installSkill ??
         vi.fn().mockResolvedValue({
-          skillName: "default",
+          name: "default",
           skillPath: "/skills/default"
-        })
+        }),
+      uninstallSkill:
+        logic.uninstallSkill ??
+        vi.fn().mockResolvedValue({ name: "removed" }),
+      getSkillStatuses:
+        logic.getSkillStatuses ??
+        vi.fn().mockResolvedValue([
+          {
+            skillKey: "default",
+            source: "openclaw-bundled",
+            skillPath: "/repo/skills/default"
+          }
+        ])
     }))
   }));
 
@@ -136,21 +159,203 @@ describe("createSkillsRouter", () => {
 
   it("registers POST /api/dip-studio/v1/skills/install", async () => {
     const { createSkillsRouter } = await importRouterWithLogicMock({
-      listEnabledSkills: async () => []
+      listEnabledSkills: async () => [],
+      listEnabledSkillsByQuery: async () => []
     });
     const router = createSkillsRouter() as Router;
 
     expect(findHandler(router, "post", skillsInstallPath)).toBeDefined();
   });
 
-  it("installs skill from multipart file field", async () => {
-    const installSkill = vi.fn().mockResolvedValue({
-      skillName: "weather",
-      skillPath: "/repo/skills/weather"
-    });
+  it("registers DELETE /api/dip-studio/v1/skills/:name", async () => {
     const { createSkillsRouter } = await importRouterWithLogicMock({
       listEnabledSkills: async () => [],
-      installSkill
+      listEnabledSkillsByQuery: async () => []
+    });
+    const router = createSkillsRouter() as Router;
+
+    expect(
+      findHandler(router, "delete", "/api/dip-studio/v1/skills/:name")
+    ).toBeDefined();
+  });
+
+  it("uninstalls skill from path parameter", async () => {
+    const uninstallSkill = vi.fn().mockResolvedValue({ name: "weather" });
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      uninstallSkill,
+      getSkillStatuses: async () => [
+        {
+          skillKey: "weather",
+          source: "openclaw-managed",
+          skillPath: "/Users/test/.openclaw/skills/weather"
+        }
+      ]
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(
+      router,
+      "delete",
+      "/api/dip-studio/v1/skills/:name"
+    );
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "weather" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(uninstallSkill).toHaveBeenCalledWith("weather");
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith({ name: "weather" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid skill id in uninstall path", async () => {
+    const uninstallSkill = vi.fn();
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      uninstallSkill,
+      getSkillStatuses: async () => []
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(
+      router,
+      "delete",
+      "/api/dip-studio/v1/skills/:name"
+    );
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "bad name" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(uninstallSkill).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 400
+      })
+    );
+  });
+
+  it("returns 404 when deletable skill is not found", async () => {
+    const uninstallSkill = vi.fn();
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      uninstallSkill,
+      getSkillStatuses: async () => [
+        { skillKey: "other", source: "openclaw-bundled", skillPath: "/repo/skills/other" }
+      ]
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(
+      router,
+      "delete",
+      "/api/dip-studio/v1/skills/:name"
+    );
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "missing" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(uninstallSkill).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 404
+      })
+    );
+  });
+
+  it("matches skill entries by skillPath slug when skillKey differs", async () => {
+    const uninstallSkill = vi.fn().mockResolvedValue({ name: "excel-xlsx" });
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      uninstallSkill,
+      getSkillStatuses: async () => [
+        {
+          skillKey: "excel-xlsx",
+          source: "openclaw-managed",
+          skillPath: "/Users/test/.openclaw/skills/excel-xlsx"
+        }
+      ]
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(
+      router,
+      "delete",
+      "/api/dip-studio/v1/skills/:name"
+    );
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "excel-xlsx" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(uninstallSkill).toHaveBeenCalledWith("excel-xlsx");
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith({ name: "excel-xlsx" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects uninstall when skill source is not openclaw-managed", async () => {
+    const uninstallSkill = vi.fn();
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      uninstallSkill,
+      getSkillStatuses: async () => [
+        {
+          skillKey: "weather",
+          source: "openclaw-bundled",
+          skillPath: "/Users/test/.openclaw/skills/weather"
+        }
+      ]
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(
+      router,
+      "delete",
+      "/api/dip-studio/v1/skills/:name"
+    );
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "weather" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(uninstallSkill).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 403
+      })
+    );
+  });
+
+  it("installs skill from multipart file field", async () => {
+    const installSkill = vi.fn().mockResolvedValue({
+      name: "weather",
+      skillPath: "/repo/skills/weather",
+      displayName: "Weather Display"
+    });
+    const listEnabledSkillsByQuery = vi.fn();
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      installSkill,
+      listEnabledSkillsByQuery
     });
     const router = createSkillsRouter() as Router;
     const handler = findHandler(router, "post", skillsInstallPath);
@@ -165,22 +370,26 @@ describe("createSkillsRouter", () => {
     );
 
     expect(installSkill).toHaveBeenCalledWith(zip, { overwrite: true });
+    expect(listEnabledSkillsByQuery).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith({
-      skillName: "weather",
+      name: "Weather Display",
       skillPath: "/repo/skills/weather"
     });
     expect(next).not.toHaveBeenCalled();
   });
 
-  it("forwards optional skillName for flat-layout installs", async () => {
+  it("forwards optional name for flat-layout installs", async () => {
     const installSkill = vi.fn().mockResolvedValue({
-      skillName: "my-skill",
-      skillPath: "/repo/skills/my-skill"
+      name: "my-skill",
+      skillPath: "/repo/skills/my-skill",
+      displayName: "Custom Skill"
     });
+    const listEnabledSkillsByQuery = vi.fn();
     const { createSkillsRouter } = await importRouterWithLogicMock({
       listEnabledSkills: async () => [],
-      installSkill
+      installSkill,
+      listEnabledSkillsByQuery
     });
     const router = createSkillsRouter() as Router;
     const handler = findHandler(router, "post", skillsInstallPath);
@@ -194,17 +403,20 @@ describe("createSkillsRouter", () => {
       next
     );
 
-    expect(installSkill).toHaveBeenCalledWith(zip, { skillName: "my-skill" });
+    expect(installSkill).toHaveBeenCalledWith(zip, { name: "my-skill" });
   });
 
-  it("derives skillName from upload filename when multipart skillName is absent", async () => {
+  it("derives name from upload filename when multipart name is absent", async () => {
     const installSkill = vi.fn().mockResolvedValue({
-      skillName: "weather",
-      skillPath: "/repo/skills/weather"
+      name: "weather",
+      skillPath: "/repo/skills/weather",
+      displayName: "weather"
     });
+    const listEnabledSkillsByQuery = vi.fn();
     const { createSkillsRouter } = await importRouterWithLogicMock({
       listEnabledSkills: async () => [],
-      installSkill
+      installSkill,
+      listEnabledSkillsByQuery
     });
     const router = createSkillsRouter() as Router;
     const handler = findHandler(router, "post", skillsInstallPath);
@@ -218,7 +430,35 @@ describe("createSkillsRouter", () => {
       next
     );
 
-    expect(installSkill).toHaveBeenCalledWith(zip, { skillName: "weather" });
+    expect(installSkill).toHaveBeenCalledWith(zip, { name: "weather" });
+  });
+
+  it("falls back to skills list when displayName is missing", async () => {
+    const installSkill = vi.fn().mockResolvedValue({
+      name: "weather",
+      skillPath: "/repo/skills/weather"
+    });
+    const listEnabledSkillsByQuery = vi.fn().mockResolvedValue([
+      { name: "Weather Pretty", description: undefined, built_in: false, type: "unknown" }
+    ]);
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      installSkill,
+      listEnabledSkillsByQuery
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(router, "post", skillsInstallPath);
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+    const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+    await handler?.(createMultipartSkillRequest(zip), response, next);
+
+    expect(listEnabledSkillsByQuery).toHaveBeenCalledWith("weather");
+    expect(response.json).toHaveBeenCalledWith({
+      name: "Weather Pretty",
+      skillPath: "/repo/skills/weather"
+    });
   });
 
   it("rejects missing or empty multipart file", async () => {
@@ -271,8 +511,8 @@ describe("createSkillsRouter", () => {
   it("returns available skills on success", async () => {
     const { createSkillsRouter } = await importRouterWithLogicMock({
       listEnabledSkills: async () => [
-        { name: "planner", description: "plan tasks", built_in: false },
-        { name: "writer", description: "write docs", built_in: false }
+        { name: "planner", description: "plan tasks", built_in: false, type: "unknown" },
+        { name: "writer", description: "write docs", built_in: false, type: "unknown" }
       ]
     });
     const router = createSkillsRouter() as Router;
@@ -284,8 +524,8 @@ describe("createSkillsRouter", () => {
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith([
-      { name: "planner", description: "plan tasks", built_in: false },
-      { name: "writer", description: "write docs", built_in: false }
+      { name: "planner", description: "plan tasks", built_in: false, type: "unknown" },
+      { name: "writer", description: "write docs", built_in: false, type: "unknown" }
     ]);
     expect(next).not.toHaveBeenCalled();
   });
@@ -303,7 +543,7 @@ describe("createSkillsRouter", () => {
     const { createSkillsRouter } = await importRouterWithLogicMock({
       listEnabledSkills: async () => [],
       listDigitalHumanSkills: async (id) => [
-        { name: `${id}-planner`, description: "plan tasks", built_in: false }
+        { name: `${id}-planner`, description: "plan tasks", built_in: false, type: "unknown" }
       ]
     });
     const router = createSkillsRouter() as Router;
@@ -319,7 +559,7 @@ describe("createSkillsRouter", () => {
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith([
-      { name: "a1-planner", description: "plan tasks", built_in: false }
+      { name: "a1-planner", description: "plan tasks", built_in: false, type: "unknown" }
     ]);
     expect(next).not.toHaveBeenCalled();
   });

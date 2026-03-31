@@ -1,3 +1,5 @@
+import type { SkillOriginType } from "./openclaw";
+
 /**
  * Describes the public digital human payload exposed by DIP Studio.
  */
@@ -48,6 +50,11 @@ export interface DigitalHumanSkill {
    * (`archive-protocol`, `schedule-plan`, `kweaver-core`).
    */
   built_in: boolean;
+
+  /**
+   * Where the skill directory lives on the gateway host (OpenClaw layout).
+   */
+  type: SkillOriginType;
 }
 
 /**
@@ -69,6 +76,11 @@ export interface DigitalHumanAgentSkill {
    * (`archive-protocol`, `schedule-plan`, `kweaver-core`).
    */
   built_in: boolean;
+
+  /**
+   * Where the skill directory lives on the gateway host (OpenClaw layout).
+   */
+  type: SkillOriginType;
 
   /**
    * Whether the target digital human currently enables this skill.

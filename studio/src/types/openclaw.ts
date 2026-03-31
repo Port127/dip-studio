@@ -369,9 +369,19 @@ export interface OpenClawSkillsStatusParams {
 }
 
 /**
+ * Gateway-reported classification for a skill entry (mirrors `skills.status` `source` field).
+ */
+export type SkillOriginType = string;
+
+/**
  * Normalized skill status entry returned by `skills.status`.
  */
 export interface OpenClawSkillStatusEntry {
+  /**
+   * Gateway-reported source classification (see `skills.status` payloads).
+   */
+  source?: SkillOriginType;
+
   /**
    * Stable skill identifier.
    */
@@ -391,6 +401,16 @@ export interface OpenClawSkillStatusEntry {
    * Whether the skill is enabled in the queried scope.
    */
   enabled?: boolean;
+
+  /**
+   * Absolute path to the skill directory when the gateway exposes it.
+   */
+  skillPath?: string;
+
+  /**
+   * Classified origin for {@link OpenClawSkillStatusEntry.skillPath} when present.
+   */
+  skillOriginType?: SkillOriginType;
 }
 
 /**

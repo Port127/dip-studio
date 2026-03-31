@@ -89,7 +89,7 @@ function extractZipWithSystemTools(zipPath: string, destDir: string): void {
 }
 
 /**
- * Installs a `.skill` zip (OpenClaw skill bundle) into `repoSkillsDir/<skillName>/`.
+ * Installs a `.skill` zip (OpenClaw skill bundle) into `repoSkillsDir/<name>/`.
  *
  * Uses the host `tar` or `unzip` binary to read the archive — no third-party zip npm packages.
  *
@@ -97,18 +97,18 @@ function extractZipWithSystemTools(zipPath: string, destDir: string): void {
  *
  * - **Nested**: exactly one top-level directory whose name is the skill id, containing `SKILL.md`; or
  * - **Flat**: `SKILL.md` at the archive root (any number of sibling files/folders). Requires
- *   `options.skillName` (slug). The entire extracted tree is copied to `skills/<skillName>/`.
+ *   `options.name` (slug). The entire extracted tree is copied to `skills/<name>/`.
  *
  * @param zipBuffer Raw zip bytes.
  * @param repoSkillsDir Absolute path to the repository `skills` directory (`path.join(repoRoot, "skills")`).
- * @param options Optional size limit, overwrite, and `skillName` (required for flat layout).
+ * @param options Optional size limit, overwrite, and `name` (required for flat layout).
  * @returns The installed skill id and absolute destination path.
  */
 export function installSkillFromZipBuffer(
   zipBuffer: Buffer,
   repoSkillsDir: string,
-  options?: { overwrite?: boolean; maxBytes?: number; skillName?: string }
-): { skillName: string; skillPath: string } {
+  options?: { overwrite?: boolean; maxBytes?: number; name?: string }
+): { name: string; skillPath: string; displayName?: string } {
   const maxBytes = options?.maxBytes ?? DEFAULT_MAX_BYTES;
   if (zipBuffer.length > maxBytes) {
     throw new SkillInstallError(
@@ -153,28 +153,36 @@ export function installSkillFromZipBuffer(
     const hasRootSkillMd = fs.existsSync(rootSkillMdPath);
 
     if (hasRootSkillMd) {
-      const skillName = options?.skillName?.trim();
-      if (skillName === undefined || skillName.length === 0) {
+      const installName = options?.name?.trim();
+      if (installName === undefined || installName.length === 0) {
         throw new SkillInstallError(
           "INVALID_NAME",
-          "Archive has SKILL.md at zip root; pass `skillName` (e.g. ?skillName=my-skill) to choose the skills/ folder name"
+          "Archive has SKILL.md at zip root; pass `name` (e.g. ?name=my-skill) to choose the skills/ folder name"
         );
       }
-      if (!isSafeSegment(skillName) || !SKILL_NAME_RE.test(skillName)) {
+      if (!isSafeSegment(installName) || !SKILL_NAME_RE.test(installName)) {
         throw new SkillInstallError(
           "INVALID_NAME",
-          `Invalid skill name "${skillName}" (expected a slug such as "my-skill")`
+          `Invalid skill name "${installName}" (expected a slug such as "my-skill")`
+        );
+      }
+
+      const displayName = readSkillNameFromFrontMatter(rootSkillMdPath);
+      if (displayName !== undefined && displayName.trim() !== installName) {
+        throw new SkillInstallError(
+          "INVALID_NAME",
+          `SKILL.md name "${displayName}" must match slug "${installName}"`
         );
       }
 
       assertExtractedPathsContained(extractRoot, extractRoot);
 
-      const dest = path.join(repoSkillsDir, skillName);
+      const dest = path.join(repoSkillsDir, installName);
       if (fs.existsSync(dest)) {
         if (!options?.overwrite) {
           throw new SkillInstallError(
             "CONFLICT",
-            `Skill "${skillName}" already exists under skills/`
+            `Skill "${installName}" already exists under skills/`
           );
         }
         fs.rmSync(dest, { recursive: true, force: true });
@@ -183,13 +191,13 @@ export function installSkillFromZipBuffer(
       fs.mkdirSync(repoSkillsDir, { recursive: true });
       fs.cpSync(extractRoot, dest, { recursive: true });
 
-      return { skillName, skillPath: dest };
+      return { name: installName, skillPath: dest, displayName };
     }
 
     if (topLevel.length > 1) {
       throw new SkillInstallError(
         "BAD_LAYOUT",
-        "Zip has multiple top-level entries but no SKILL.md at archive root; use a single top-level folder with SKILL.md inside, or add SKILL.md at the zip root and pass skillName"
+        "Zip has multiple top-level entries but no SKILL.md at archive root; use a single top-level folder with SKILL.md inside, or add SKILL.md at the zip root and pass name"
       );
     }
 
@@ -197,7 +205,7 @@ export function installSkillFromZipBuffer(
     if (!only.isDirectory()) {
       throw new SkillInstallError(
         "BAD_LAYOUT",
-        "Zip must contain SKILL.md at archive root (flat layout + skillName) or one top-level directory with SKILL.md inside"
+        "Zip must contain SKILL.md at archive root (flat layout + name) or one top-level directory with SKILL.md inside"
       );
     }
 
@@ -218,6 +226,14 @@ export function installSkillFromZipBuffer(
       );
     }
 
+    const displayName = readSkillNameFromFrontMatter(skillMdPath);
+    if (displayName !== undefined && displayName.trim() !== skillName) {
+      throw new SkillInstallError(
+        "INVALID_NAME",
+        `SKILL.md name "${displayName}" must match slug "${skillName}"`
+      );
+    }
+
     assertExtractedPathsContained(extractRoot, extractedRoot);
 
     const dest = path.join(repoSkillsDir, skillName);
@@ -234,7 +250,7 @@ export function installSkillFromZipBuffer(
     fs.mkdirSync(repoSkillsDir, { recursive: true });
     fs.cpSync(extractedRoot, dest, { recursive: true });
 
-    return { skillName, skillPath: dest };
+    return { name: skillName, skillPath: dest, displayName };
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
@@ -244,7 +260,7 @@ export function installSkillFromZipBuffer(
  * Ensures every file under the extracted skill tree stays inside the temp sandbox.
  *
  * @param extractRoot Parent directory passed to `tar` / `unzip` (`-C` / `-d`).
- * @param skillDir Path to `<extractRoot>/<skillName>`.
+ * @param skillDir Path to `<extractRoot>/<name>`.
  */
 function assertExtractedPathsContained(extractRoot: string, skillDir: string): void {
   const resolvedRoot = path.resolve(skillDir);
@@ -285,4 +301,26 @@ export function skillInstallErrorHttpStatus(code: SkillInstallErrorCode): number
     default:
       return 400;
   }
+}
+function readSkillNameFromFrontMatter(skillMdPath: string): string | undefined {
+  try {
+    const contents = fs.readFileSync(skillMdPath, "utf8");
+    const lines = contents.split(/\r?\n/);
+    if (lines[0]?.trim() !== "---") {
+      return undefined;
+    }
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() === "---") {
+        break;
+      }
+      const match = line.match(/^name:\s*(.+)$/);
+      if (match) {
+        return match[1].trim().replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }

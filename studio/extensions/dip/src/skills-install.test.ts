@@ -148,11 +148,24 @@ describe("skills-install", () => {
 
     const result = installSkillFromZipBuffer(zip, repoSkillsDir);
 
-    expect(result.skillName).toBe("weather");
+    expect(result.name).toBe("weather");
+    expect(result.displayName).toBeUndefined();
     expect(result.skillPath).toBe(path.join(repoSkillsDir, "weather"));
     expect(
       fs.readFileSync(path.join(repoSkillsDir, "weather", "SKILL.md"), "utf8")
     ).toContain("Test skill");
+  });
+
+  it.skipIf(!canPackZip)("includes displayName from SKILL.md front matter", () => {
+    const zip = buildSkillZip(
+      "weather",
+      ["---", "name: weather", "---", "# body"].join("\n")
+    );
+
+    const result = installSkillFromZipBuffer(zip, repoSkillsDir);
+
+    expect(result.name).toBe("weather");
+    expect(result.displayName).toBe("weather");
   });
 
   it.skipIf(!canPackZip)("rejects when skill exists and overwrite is false", () => {
@@ -188,19 +201,47 @@ describe("skills-install", () => {
     }
   });
 
-  it.skipIf(!canPackZip)("installs flat zip when SKILL.md is at archive root and skillName is set", () => {
-    const zip = buildFlatZip("# hello\n");
+  it.skipIf(!canPackZip)("installs flat zip when SKILL.md is at archive root and name is set", () => {
+    const zip = buildFlatZip(["---", "name: flat-skill", "---", "# hello\n"].join("\n"));
 
-    const result = installSkillFromZipBuffer(zip, repoSkillsDir, { skillName: "flat-skill" });
+    const result = installSkillFromZipBuffer(zip, repoSkillsDir, { name: "flat-skill" });
 
-    expect(result.skillName).toBe("flat-skill");
+    expect(result.name).toBe("flat-skill");
+    expect(result.displayName).toBe("flat-skill");
     expect(
       fs.readFileSync(path.join(repoSkillsDir, "flat-skill", "SKILL.md"), "utf8")
     ).toContain("hello");
     expect(fs.readFileSync(path.join(repoSkillsDir, "flat-skill", "extra.txt"), "utf8")).toBe("x");
   });
 
-  it.skipIf(!canPackZip)("rejects flat zip without skillName", () => {
+  it.skipIf(!canPackZip)("rejects when SKILL.md name mismatches directory name", () => {
+    const zip = buildSkillZip(
+      "weather",
+      ["---", "name: other", "---", "# body"].join("\n")
+    );
+
+    expect(() => installSkillFromZipBuffer(zip, repoSkillsDir)).toThrow(SkillInstallError);
+    try {
+      installSkillFromZipBuffer(zip, repoSkillsDir);
+    } catch (e: unknown) {
+      expect(e).toMatchObject({ code: "INVALID_NAME" });
+    }
+  });
+
+  it.skipIf(!canPackZip)("rejects flat layout when SKILL.md name mismatches provided slug", () => {
+    const zip = buildFlatZip(["---", "name: other", "---", "# body"].join("\n"));
+
+    expect(() =>
+      installSkillFromZipBuffer(zip, repoSkillsDir, { name: "flat-skill" })
+    ).toThrow(SkillInstallError);
+    try {
+      installSkillFromZipBuffer(zip, repoSkillsDir, { name: "flat-skill" });
+    } catch (e: unknown) {
+      expect(e).toMatchObject({ code: "INVALID_NAME" });
+    }
+  });
+
+  it.skipIf(!canPackZip)("rejects flat zip without name", () => {
     const zip = buildFlatZip();
 
     expect(() => installSkillFromZipBuffer(zip, repoSkillsDir)).toThrow(SkillInstallError);

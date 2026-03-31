@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveSkillIdFromUploadedFilename,
   isDefaultDigitalHumanSkillSlug,
+  isValidSkillSlug,
   mergeCreateDigitalHumanSkills
 } from "./skills";
 
@@ -23,6 +24,20 @@ describe("deriveSkillIdFromUploadedFilename", () => {
     expect(deriveSkillIdFromUploadedFilename("   ")).toBeUndefined();
     expect(deriveSkillIdFromUploadedFilename("no ext")).toBeUndefined();
     expect(deriveSkillIdFromUploadedFilename("(bad).skill")).toBeUndefined();
+  });
+});
+
+describe("isValidSkillSlug", () => {
+  it("accepts slugs that match DIP install rules", () => {
+    expect(isValidSkillSlug("weather")).toBe(true);
+    expect(isValidSkillSlug("my-skill")).toBe(true);
+    expect(isValidSkillSlug("a.b")).toBe(true);
+  });
+
+  it("rejects invalid values", () => {
+    expect(isValidSkillSlug("")).toBe(false);
+    expect(isValidSkillSlug("bad name")).toBe(false);
+    expect(isValidSkillSlug("../x")).toBe(false);
   });
 });
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildOpenClawAgentSkillsUrl,
   buildOpenClawSkillInstallUrl,
+  buildOpenClawSkillUninstallUrl,
   createOpenClawAgentSkillsHeaders,
   createOpenClawAgentSkillsStatusError,
   createOpenClawSkillInstallStatusError,
@@ -21,17 +22,28 @@ describe("buildOpenClawSkillInstallUrl", () => {
     ).toBe("http://127.0.0.1:19001/v1/config/agents/skills/install?overwrite=true");
     expect(
       buildOpenClawSkillInstallUrl("http://127.0.0.1:19001", {
-        skillName: "my-skill"
+        name: "my-skill"
       })
-    ).toBe("http://127.0.0.1:19001/v1/config/agents/skills/install?skillName=my-skill");
+    ).toBe("http://127.0.0.1:19001/v1/config/agents/skills/install?name=my-skill");
     expect(
       buildOpenClawSkillInstallUrl("http://127.0.0.1:19001", {
         overwrite: true,
-        skillName: "x"
+        name: "x"
       })
     ).toBe(
-      "http://127.0.0.1:19001/v1/config/agents/skills/install?overwrite=true&skillName=x"
+      "http://127.0.0.1:19001/v1/config/agents/skills/install?overwrite=true&name=x"
     );
+  });
+});
+
+describe("buildOpenClawSkillUninstallUrl", () => {
+  it("converts gateway URL and encodes path parameter", () => {
+    expect(
+      buildOpenClawSkillUninstallUrl("ws://127.0.0.1:19001/ws", "weather")
+    ).toBe("http://127.0.0.1:19001/v1/config/agents/skills/weather");
+    expect(
+      buildOpenClawSkillUninstallUrl("http://127.0.0.1:19001", "a.b")
+    ).toBe("http://127.0.0.1:19001/v1/config/agents/skills/a.b");
   });
 });
 
@@ -212,7 +224,7 @@ describe("DefaultOpenClawAgentSkillsHttpClient", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          skillName: "weather",
+          name: "weather",
           skillPath: "/data/skills/weather"
         }),
         { status: 200, headers: { "content-type": "application/json" } }
@@ -229,7 +241,7 @@ describe("DefaultOpenClawAgentSkillsHttpClient", () => {
     );
 
     await expect(client.installSkill(zipBody, { overwrite: true })).resolves.toEqual({
-      skillName: "weather",
+      name: "weather",
       skillPath: "/data/skills/weather"
     });
 
@@ -239,6 +251,35 @@ describe("DefaultOpenClawAgentSkillsHttpClient", () => {
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
       body: new Uint8Array(zipBody)
+    });
+  });
+
+  it("uninstalls a skill via DELETE", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ name: "weather" }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const client = new DefaultOpenClawAgentSkillsHttpClient(
+      {
+        gatewayUrl: "http://127.0.0.1:19001",
+        token: "t",
+        timeoutMs: 5000
+      },
+      fetchImpl
+    );
+
+    await expect(client.uninstallSkill("weather")).resolves.toEqual({
+      name: "weather"
+    });
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:19001/v1/config/agents/skills/weather"
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: "DELETE"
     });
   });
 });

@@ -32,6 +32,7 @@ GET    /v1/config/agents/skills?agentId=<id>
 POST   /v1/config/agents/skills
 PUT    /v1/config/agents/skills
 POST   /v1/config/agents/skills/install
+DELETE /v1/config/agents/skills/<name>
 ```
 
 **查询与更新 agent 技能绑定**
@@ -45,12 +46,18 @@ POST   /v1/config/agents/skills/install
 **安装 `.skill` 包（zip）**
 
 - `POST /v1/config/agents/skills/install`
-- 查询参数：`overwrite=true`（可选）。为 `true` 时，若 `skills/<skillName>/` 已存在则先删除再写入。
-- 查询参数：`skillName=<slug>`（可选）。当 zip **根目录**含 **`SKILL.md`**（扁平布局，可多顶层文件/目录）时**必填**，用于指定安装目录名；若 zip 为**单一顶层目录** `<name>/` 且内含 `<name>/SKILL.md`，则技能 id 取自目录名，**不需要** `skillName`。
+- 查询参数：`overwrite=true`（可选）。为 `true` 时，若 `skills/<name>/` 已存在则先删除再写入。
+- 查询参数：`name=<slug>`（可选）。当 zip **根目录**含 **`SKILL.md`**（扁平布局，可多顶层文件/目录）时**必填**，用于指定安装目录名；若 zip 为**单一顶层目录** `<name>/` 且内含 `<name>/SKILL.md`，则技能 id 取自目录名，**不需要** `name`。
 - 请求体：**原始 zip 字节**（推荐 `Content-Type: application/zip`）。
-- 成功响应示例：`{ "skillName": "<id>", "skillPath": "<绝对路径>" }`（路径为网关进程所在机器上的落盘路径）。
-- 包内结构（二选一）：**嵌套** — zip 根下仅一个顶层目录 `<skillName>/`，且含 `<skillName>/SKILL.md`；**扁平** — zip 根下含 `SKILL.md`，且通过 `skillName` 指定安装名。目录名需符合常见 slug 字符集。
+- 成功响应示例：`{ "name": "<id>", "skillPath": "<绝对路径>" }`（路径为网关进程所在机器上的落盘路径）。
+- 包内结构（二选一）：**嵌套** — zip 根下仅一个顶层目录 `<name>/`，且含 `<name>/SKILL.md`；**扁平** — zip 根下含 `SKILL.md`，且通过 `name` 指定安装名。目录名需符合常见 slug 字符集。
 - 解压**不引入 npm 压缩库**，通过宿主环境的 `tar -xf` 或 `unzip` 执行。运行 OpenClaw 的进程需在 `PATH` 上能调用其中之一（多数 Linux/macOS/Windows 10+ 自带可读 zip 的 `tar`；极简容器可能需自行安装 `tar` 或 `unzip`，二者并非在所有环境都保证存在）。
+
+**卸载技能（仓库 `skills/`）**
+
+- `DELETE /v1/config/agents/skills/<slug>`（路径参数为技能 id）。
+- 仅删除 **`{repoRoot}/skills/<name>/`**（或同名 `*.skill` 条目）若存在；若该 id **仅**存在于插件内置 `extensions/dip/skills/`，返回 **403**（`BUNDLED`），不删除内置包。Studio 仅会在 `skills.status` 条目 `source === "openclaw-managed"` 且目录位于 `~/.openclaw/skills/<name>/` 时调用此接口。
+- 成功：`200` + `{ "name": "<id>" }`。
 
 ### 2. Skills 发现
 

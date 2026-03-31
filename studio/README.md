@@ -202,17 +202,24 @@ GitHub：https://github.com/kweaver-ai/web
 
 响应：`200 application/json`
 
+查询参数：
+
 | 参数 | 类型 | 说明 |
 | -- | -- | -- |
-| [\].name | string | 技能名称 |
+| name | string | 可选；按技能 ID 或展示名称/描述模糊匹配，大小写不敏感 |
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| [\].name | string | 技能 ID（同时作为展示名称；必须与 `SKILL.md` front matter `name` 一致） |
 | [\].description | string | 技能描述，可选 |
 | [\].built_in | boolean | 是否为 DIP 数字员工内置技能（`archive-protocol`、`schedule-plan`、`kweaver-core`） |
+| [\].type | string | OpenClaw `skills.status` 响应中的 `source` 字段，例如 `openclaw-bundled`、`openclaw-managed`、`agents-skills-personal` 等 |
 
 #### 安装 .skill 包（zip）
 
 `POST /api/dip-studio/v1/skills/install`
 
-使用 **`multipart/form-data`**。服务端将 zip 读入内存后转发至 OpenClaw 网关 `dip` 插件（`skillName`、`overwrite` 作为上游查询参数），详见插件 README。单文件大小上限 **32MB**。
+使用 **`multipart/form-data`**。服务端将 zip 读入内存后转发至 OpenClaw 网关 `dip` 插件（`name`、`overwrite` 作为上游查询参数），详见插件 README。单文件大小上限 **32MB**。
 
 **支持的文件类型**
 
@@ -226,16 +233,30 @@ GitHub：https://github.com/kweaver-ai/web
 | -- | -- | -- | -- |
 | file | binary | 是 | 上述 ZIP 包的字节内容（字段名固定为 `file`） |
 | overwrite | string | 否 | 为 `true` 或 `1` 时，若 `skills/<name>/` 已存在则覆盖 |
-| skillName | string | 否 | 技能目录名（slug）。不传则按**上传文件名**推导（basename，去 `.skill`/`.zip` 后缀，须符合 slug）。扁平包（zip 根含 `SKILL.md`）时用该名作为 `skills/<skillName>/` |
+| skillName | string | 否 | 技能名称。不传则按**上传文件名**推导（basename，去 `.skill`/`.zip` 后缀，须符合命名规则）。扁平包（zip 根含 `SKILL.md`）时用该名作为 `skills/<name>/` |
 
-前端示例：`form.append("file", fileBlob, "my-skill.skill")`（可用文件名代替显式 `skillName`）；覆盖时 `form.append("overwrite", "true")`；覆盖推导名时 `form.append("skillName", "other-id")`。
+前端示例：`form.append("file", fileBlob, "my-skill.skill")`（可用文件名代替显式 `skillName`）；覆盖时 `form.append("overwrite", "true")`；覆盖默认推导 id 时 `form.append("skillName", "other-id")`。
+
+> ⚠️ `SKILL.md` 中 front matter 的 `name` 字段必须与 `skillName`/目录名完全一致，否则安装会被拒绝。
 
 响应：`200 application/json`
 
 | 参数 | 类型 | 说明 |
 | -- | -- | -- |
-| skillName | string | 技能 ID（与包内顶层目录名一致） |
+| name | string | 技能 ID（来自 `SKILL.md` front matter `name`，必须与目录名一致） |
 | skillPath | string | 网关上落盘目录的绝对路径 |
+
+#### 卸载技能
+
+`DELETE /api/dip-studio/v1/skills/{name}`
+
+路径参数 **`name`** 为技能 ID。删除前服务会查询 OpenClaw `skills.status`，仅当 `type === "openclaw-managed"` 时允许卸载；其它来源（如 `openclaw-bundled`、`extensions/.../skills`、仓库 `skills/` 自定义包）会返回 403。满足条件后才会转发至 `dip` 插件卸载接口。
+
+响应：`200 application/json`
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| name | string | 已卸载的技能 ID |
 
 #### 业务知识网络转发
 
@@ -288,6 +309,7 @@ GitHub：https://github.com/kweaver-ai/web
 | [\].name | string | 技能名称 |
 | [\].description | string | 技能描述，可选 |
 | [\].built_in | boolean | 是否为 DIP 数字员工内置技能（`archive-protocol`、`schedule-plan`、`kweaver-core`） |
+| [\].type | string | 同「获取全局启用技能列表」中的 `[\].type` |
 
 #### 获取计划任务列表
 
