@@ -9,7 +9,7 @@ import {
 import {
   readAgentIdFromSessionKey,
   readRequiredSessionKeyHeader
-} from "./digital-human-response";
+} from "./chat";
 import { getEnv } from "../utils/env";
 
 /**
