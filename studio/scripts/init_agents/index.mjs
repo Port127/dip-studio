@@ -87,10 +87,6 @@ function readOptionalTextFile(filePath) {
 }
 
 function assertBuiltInAgentMetadata(metadata, metadataPath) {
-  if (metadata.type !== "agent") {
-    throw new Error(`built-in metadata.type 必须为 agent: ${metadataPath}`);
-  }
-
   if (metadata.is_builtin !== true) {
     throw new Error(`built-in metadata.is_builtin 必须为 true: ${metadataPath}`);
   }
@@ -119,6 +115,10 @@ function loadBuiltInAgents() {
       }
 
       const metadata = readJsonFile(metadataPath);
+      if (metadata.type !== "agent") {
+        console.log(`[跳过] ${builtInPath} metadata.json type=${metadata.type || "<empty>"}`);
+        return undefined;
+      }
       assertBuiltInAgentMetadata(metadata, metadataPath);
 
       return {
