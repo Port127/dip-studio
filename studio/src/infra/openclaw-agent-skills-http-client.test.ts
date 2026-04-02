@@ -4,6 +4,7 @@ import {
   buildOpenClawAgentSkillsUrl,
   buildOpenClawSkillInstallUrl,
   buildOpenClawSkillContentUrl,
+  buildOpenClawSkillDownloadUrl,
   buildOpenClawSkillTreeUrl,
   buildOpenClawSkillUninstallUrl,
   createOpenClawAgentSkillsHeaders,
@@ -11,10 +12,12 @@ import {
   createOpenClawAgentSkillsStatusError,
   createOpenClawSkillInstallStatusError,
   createOpenClawSkillContentStatusError,
+  createOpenClawSkillDownloadStatusError,
   createOpenClawSkillTreeStatusError,
   DefaultOpenClawAgentSkillsHttpClient,
   normalizeOpenClawAgentSkillsError,
   normalizeOpenClawSkillContentError,
+  normalizeOpenClawSkillDownloadError,
   normalizeOpenClawSkillInstallError,
   normalizeOpenClawSkillTreeError
 } from "./openclaw-agent-skills-http-client";
@@ -71,6 +74,16 @@ describe("buildOpenClawSkillContentUrl", () => {
       buildOpenClawSkillContentUrl("ws://127.0.0.1:19001/ws", "weather", "docs/guide.md")
     ).toBe(
       "http://127.0.0.1:19001/v1/config/agents/skills/weather/content?path=docs%2Fguide.md"
+    );
+  });
+});
+
+describe("buildOpenClawSkillDownloadUrl", () => {
+  it("converts gateway URL and appends download path query", () => {
+    expect(
+      buildOpenClawSkillDownloadUrl("ws://127.0.0.1:19001/ws", "weather", "docs/guide.md")
+    ).toBe(
+      "http://127.0.0.1:19001/v1/config/agents/skills/weather/download?path=docs%2Fguide.md"
     );
   });
 });
@@ -158,6 +171,17 @@ describe("createOpenClawSkillContentStatusError", () => {
   });
 });
 
+describe("createOpenClawSkillDownloadStatusError", () => {
+  it("returns a 502 error with upstream details", async () => {
+    const response = new Response("bad path", { status: 400 });
+
+    await expect(createOpenClawSkillDownloadStatusError(response)).resolves.toMatchObject({
+      statusCode: 502,
+      message: "OpenClaw /v1/config/agents/skills/{name}/download returned HTTP 400: bad path"
+    });
+  });
+});
+
 describe("normalizeOpenClawSkillTreeError", () => {
   it("wraps unknown errors", async () => {
     const { HttpError } = await import("../errors/http-error");
@@ -180,6 +204,19 @@ describe("normalizeOpenClawSkillContentError", () => {
     expect(normalizeOpenClawSkillContentError(new Error("down"))).toMatchObject({
       statusCode: 502,
       message: "Failed to communicate with OpenClaw /v1/config/agents/skills/{name}/content: down"
+    });
+  });
+});
+
+describe("normalizeOpenClawSkillDownloadError", () => {
+  it("wraps unknown errors", async () => {
+    const { HttpError } = await import("../errors/http-error");
+    expect(normalizeOpenClawSkillDownloadError(new HttpError(502, "x"))).toMatchObject({
+      statusCode: 502
+    });
+    expect(normalizeOpenClawSkillDownloadError(new Error("down"))).toMatchObject({
+      statusCode: 502,
+      message: "Failed to communicate with OpenClaw /v1/config/agents/skills/{name}/download: down"
     });
   });
 });
@@ -443,6 +480,42 @@ describe("DefaultOpenClawAgentSkillsHttpClient", () => {
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       "http://127.0.0.1:19001/v1/config/agents/skills/weather/content?path=SKILL.md"
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: "GET"
+    });
+  });
+
+  it("downloads skill file via GET", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(Buffer.from("hello"), {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+          "content-disposition": 'attachment; filename="a.txt"'
+        }
+      })
+    );
+
+    const client = new DefaultOpenClawAgentSkillsHttpClient(
+      {
+        gatewayUrl: "http://127.0.0.1:19001",
+        token: "t",
+        timeoutMs: 5000
+      },
+      fetchImpl
+    );
+
+    const result = await client.downloadSkillFile("weather", "docs/a.txt");
+    expect(result.status).toBe(200);
+    expect(result.headers.get("content-type")).toBe("text/plain");
+    expect(result.headers.get("content-disposition")).toBe(
+      'attachment; filename="a.txt"'
+    );
+    expect(Buffer.from(result.body)).toEqual(Buffer.from("hello"));
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:19001/v1/config/agents/skills/weather/download?path=docs%2Fa.txt"
     );
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       method: "GET"

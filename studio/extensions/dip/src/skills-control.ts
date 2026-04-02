@@ -1,6 +1,8 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { type OpenClawPluginApi, resolveAgentWorkspaceDir } from "openclaw/plugin-sdk";
+import { ARCHIVES_MIME_MAP } from "./archives-utils.js";
 import { discoverSkillNames, discoverSkillStatus } from "./skills-discovery.js";
 import {
   installSkillFromZipBuffer,
@@ -16,7 +18,8 @@ import {
   type SkillTreeEntry,
   SkillTreeError,
   listSkillTreeEntries,
-  readSkillFilePreview
+  readSkillFilePreview,
+  resolveSkillFilePath
 } from "./skills-tree.js";
 
 /** Maximum `.skill` upload size for the Gateway install route (bytes). */
@@ -301,6 +304,43 @@ export function registerSkillsControl(
         }
       }
 
+      if (req.method === "GET" && routeTarget?.action === "download") {
+        try {
+          const config = await api.runtime.config.loadConfig();
+          const skillDir = resolveSkillDirectory(config, routeTarget.name);
+          const filePath = url.searchParams.get("path") ?? "";
+          const file = resolveSkillFilePath(skillDir, filePath);
+          const ext = path.extname(file.absolutePath).toLowerCase();
+          const mimeType = ARCHIVES_MIME_MAP[ext] || "application/octet-stream";
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", mimeType);
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${encodeDownloadFileName(path.basename(file.absolutePath))}"`
+          );
+
+          fs.createReadStream(file.absolutePath).pipe(res);
+          return true;
+        } catch (e: unknown) {
+          if (e instanceof SkillTreeError) {
+            res.statusCode = mapSkillTreeErrorStatus(e.code);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: e.message, code: e.code }));
+            return true;
+          }
+          api.logger.error?.(`dip skills download failed: ${String(e)}`);
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: e instanceof Error ? e.message : String(e)
+            })
+          );
+          return true;
+        }
+      }
+
       if (!isBasePath) {
         res.statusCode = 404;
         res.setHeader("Content-Type", "application/json");
@@ -459,6 +499,13 @@ function extractSkillRouteTarget(
       : { name: "", action: "content" };
   }
 
+  if (suffix.endsWith("/download")) {
+    const name = suffix.slice(0, -"/download".length);
+    return name.length > 0
+      ? { name: decodeURIComponent(name), action: "download" }
+      : { name: "", action: "download" };
+  }
+
   return { name: decodeURIComponent(suffix), action: "detail" };
 }
 
@@ -486,4 +533,8 @@ function mapSkillTreeErrorStatus(code: SkillTreeError["code"]): number {
     return 400;
   }
   return 500;
+}
+
+function encodeDownloadFileName(fileName: string): string {
+  return fileName.replace(/["\\\r\n]/g, "_");
 }

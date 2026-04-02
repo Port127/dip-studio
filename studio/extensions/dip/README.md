@@ -32,6 +32,7 @@ GET    /v1/config/agents/skills
 GET    /v1/config/agents/skills?agentId=<id>
 GET    /v1/config/agents/skills/<name>/tree
 GET    /v1/config/agents/skills/<name>/content?path=<relative-file-path>
+GET    /v1/config/agents/skills/<name>/download?path=<relative-file-path>
 POST   /v1/config/agents/skills
 PUT    /v1/config/agents/skills
 POST   /v1/config/agents/skills/install
@@ -59,6 +60,13 @@ DELETE /v1/config/agents/skills/<name>
 - 仅允许读取普通文件；路径穿越和目录读取都会返回 `400`。
 - 成功返回：`{ "name", "path", "content", "bytes", "truncated" }`。
 - 当前文本预览上限为 `1MB`，超出部分不返回，并标记 `truncated=true`。
+
+**下载技能文件**
+
+- `GET /v1/config/agents/skills/<name>/download?path=<relative-file-path>`
+- `path` 是技能目录内的相对路径；不传时默认 `SKILL.md`。
+- 仅允许读取普通文件；路径穿越和目录读取都会返回 `400`。
+- 成功时返回原始文件字节流，并设置 `Content-Type` 与 `Content-Disposition: attachment`。
 
 **安装 `.skill` 包（zip）**
 

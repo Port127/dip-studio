@@ -34,6 +34,12 @@ export interface OpenClawAgentSkillsHttpClientOptions {
  */
 export type OpenClawAgentSkillsFetch = typeof fetch;
 
+export interface OpenClawAgentSkillsHttpResult {
+  status: number;
+  headers: Headers;
+  body: Uint8Array;
+}
+
 /**
  * Defines the capability needed to query and update agent skills.
  */
@@ -93,6 +99,17 @@ export interface OpenClawAgentSkillsHttpClient {
    * @param filePath Skill-root-relative file path.
    */
   getSkillContent(name: string, filePath: string): Promise<SkillContentResult>;
+
+  /**
+   * Downloads one file under a skill directory.
+   *
+   * @param name Skill id to inspect.
+   * @param filePath Skill-root-relative file path.
+   */
+  downloadSkillFile(
+    name: string,
+    filePath: string
+  ): Promise<OpenClawAgentSkillsHttpResult>;
 }
 
 /**
@@ -291,6 +308,38 @@ implements OpenClawAgentSkillsHttpClient {
 
     return (await response.json()) as SkillContentResult;
   }
+
+  /**
+   * Downloads one skill file through the Gateway plugin HTTP route.
+   *
+   * @param name Skill id (slug).
+   * @param filePath Skill-root-relative file path.
+   * @returns Upstream status, headers and body bytes.
+   */
+  public async downloadSkillFile(
+    name: string,
+    filePath: string
+  ): Promise<OpenClawAgentSkillsHttpResult> {
+    const response = await this.fetchImpl(
+      buildOpenClawSkillDownloadUrl(this.options.gatewayUrl, name, filePath),
+      {
+        method: "GET",
+        headers: createOpenClawAgentSkillsHeaders(this.options.token)
+      }
+    ).catch((error: unknown) => {
+      throw normalizeOpenClawSkillDownloadError(error);
+    });
+
+    if (!response.ok) {
+      throw await createOpenClawSkillDownloadStatusError(response);
+    }
+
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: new Uint8Array(await response.arrayBuffer())
+    };
+  }
 }
 
 /**
@@ -432,6 +481,36 @@ export function buildOpenClawSkillContentUrl(
 
   const trimmed = name.trim();
   url.pathname = `/v1/config/agents/skills/${encodeURIComponent(trimmed)}/content`;
+  url.hash = "";
+  url.search = "";
+  url.searchParams.set("path", filePath);
+
+  return url.toString();
+}
+
+/**
+ * Builds the OpenClaw `dip` plugin skill download endpoint URL.
+ *
+ * @param gatewayUrl The configured OpenClaw gateway HTTP URL.
+ * @param name Skill id to inspect.
+ * @param filePath Skill-root-relative file path.
+ * @returns The derived HTTP endpoint URL.
+ */
+export function buildOpenClawSkillDownloadUrl(
+  gatewayUrl: string,
+  name: string,
+  filePath: string
+): string {
+  const url = new URL(gatewayUrl);
+
+  if (url.protocol === "ws:") {
+    url.protocol = "http:";
+  } else if (url.protocol === "wss:") {
+    url.protocol = "https:";
+  }
+
+  const trimmed = name.trim();
+  url.pathname = `/v1/config/agents/skills/${encodeURIComponent(trimmed)}/download`;
   url.hash = "";
   url.search = "";
   url.searchParams.set("path", filePath);
@@ -696,5 +775,43 @@ export function normalizeOpenClawSkillContentError(error: unknown): HttpError {
   return new HttpError(
     502,
     `Failed to communicate with OpenClaw /v1/config/agents/skills/{name}/content: ${description}`
+  );
+}
+
+/**
+ * Converts an upstream non-2xx download response into an application error.
+ *
+ * @param response Upstream fetch response.
+ * @returns A typed HTTP error.
+ */
+export async function createOpenClawSkillDownloadStatusError(
+  response: Response
+): Promise<HttpError> {
+  const text = (await response.text()).trim();
+  const detail = text.length > 0 ? `: ${text}` : "";
+
+  return new HttpError(
+    502,
+    `OpenClaw /v1/config/agents/skills/{name}/download returned HTTP ${response.status}${detail}`
+  );
+}
+
+/**
+ * Normalizes transport errors produced while calling the skill download route.
+ *
+ * @param error Unknown thrown value.
+ * @returns A typed application error.
+ */
+export function normalizeOpenClawSkillDownloadError(error: unknown): HttpError {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const description =
+    error instanceof Error ? error.message : "Unknown upstream error";
+
+  return new HttpError(
+    502,
+    `Failed to communicate with OpenClaw /v1/config/agents/skills/{name}/download: ${description}`
   );
 }

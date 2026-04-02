@@ -18,7 +18,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -51,7 +52,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -83,7 +85,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -128,7 +131,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -172,7 +176,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -222,7 +227,8 @@ describe("DefaultAgentSkillsLogic", () => {
         installSkill: vi.fn(),
         uninstallSkill: vi.fn(),
         getSkillTree: vi.fn(),
-        getSkillContent: vi.fn()
+        getSkillContent: vi.fn(),
+        downloadSkillFile: vi.fn()
       },
       {
         listAgents: vi.fn(),
@@ -254,7 +260,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill: vi.fn(),
       uninstallSkill: vi.fn(),
       getSkillTree: vi.fn(),
-      getSkillContent: vi.fn()
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     await expect(logic.listAvailableSkills()).resolves.toEqual({
@@ -273,7 +280,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill: vi.fn(),
       uninstallSkill: vi.fn(),
       getSkillTree: vi.fn(),
-      getSkillContent: vi.fn()
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     await expect(logic.getAgentSkills("agent-1")).resolves.toEqual({
@@ -294,7 +302,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill: vi.fn(),
       uninstallSkill: vi.fn(),
       getSkillTree: vi.fn(),
-      getSkillContent: vi.fn()
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     await expect(
@@ -318,7 +327,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill,
       uninstallSkill: vi.fn(),
       getSkillTree: vi.fn(),
-      getSkillContent: vi.fn()
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     const buf = Buffer.from([0x50, 0x4b]);
@@ -338,7 +348,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill: vi.fn(),
       uninstallSkill,
       getSkillTree: vi.fn(),
-      getSkillContent: vi.fn()
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     await expect(logic.uninstallSkill("weather")).resolves.toEqual({
@@ -358,7 +369,9 @@ describe("DefaultAgentSkillsLogic", () => {
       updateAgentSkills: vi.fn(),
       installSkill: vi.fn(),
       uninstallSkill: vi.fn(),
-      getSkillTree
+      getSkillTree,
+      getSkillContent: vi.fn(),
+      downloadSkillFile: vi.fn()
     });
 
     await expect(logic.getSkillTree("weather")).resolves.toEqual({
@@ -383,7 +396,8 @@ describe("DefaultAgentSkillsLogic", () => {
       installSkill: vi.fn(),
       uninstallSkill: vi.fn(),
       getSkillTree: vi.fn(),
-      getSkillContent
+      getSkillContent,
+      downloadSkillFile: vi.fn()
     });
 
     await expect(logic.getSkillContent("weather", "SKILL.md")).resolves.toEqual({
@@ -394,6 +408,30 @@ describe("DefaultAgentSkillsLogic", () => {
       truncated: false
     });
     expect(getSkillContent).toHaveBeenCalledWith("weather", "SKILL.md");
+  });
+
+  it("delegates downloadSkillFile to the client", async () => {
+    const downloadSkillFile = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: new Headers({ "content-type": "text/plain" }),
+      body: new Uint8Array(Buffer.from("hello"))
+    });
+    const logic = new DefaultAgentSkillsLogic({
+      listAvailableSkills: vi.fn(),
+      getAgentSkills: vi.fn(),
+      updateAgentSkills: vi.fn(),
+      installSkill: vi.fn(),
+      uninstallSkill: vi.fn(),
+      getSkillTree: vi.fn(),
+      getSkillContent: vi.fn(),
+      downloadSkillFile
+    });
+
+    const result = await logic.downloadSkillFile("weather", "SKILL.md");
+    expect(result.status).toBe(200);
+    expect(result.headers.get("content-type")).toBe("text/plain");
+    expect(Buffer.from(result.body)).toEqual(Buffer.from("hello"));
+    expect(downloadSkillFile).toHaveBeenCalledWith("weather", "SKILL.md");
   });
 
   it("getSkillEntryName prefers name and trims whitespace", () => {

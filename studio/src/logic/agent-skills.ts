@@ -1,5 +1,6 @@
 import type { OpenClawAgentsAdapter } from "../adapters/openclaw-agents-adapter";
 import type { OpenClawAgentSkillsHttpClient } from "../infra/openclaw-agent-skills-http-client";
+import type { OpenClawAgentSkillsHttpResult } from "../infra/openclaw-agent-skills-http-client";
 import type {
   DigitalHumanSkill,
   DigitalHumanAgentSkillList,
@@ -101,6 +102,17 @@ export interface AgentSkillsLogic {
    * @param filePath Skill-root-relative file path.
    */
   getSkillContent(name: string, filePath: string): Promise<SkillContentResult>;
+
+  /**
+   * Downloads one file under a skill directory.
+   *
+   * @param name Skill id to inspect.
+   * @param filePath Skill-root-relative file path.
+   */
+  downloadSkillFile(
+    name: string,
+    filePath: string
+  ): Promise<OpenClawAgentSkillsHttpResult>;
 
   /**
    * Lists raw skill status entries returned by OpenClaw.
@@ -229,6 +241,20 @@ export class DefaultAgentSkillsLogic implements AgentSkillsLogic {
     filePath: string
   ): Promise<SkillContentResult> {
     return this.client.getSkillContent(name, filePath);
+  }
+
+  /**
+   * Downloads one skill file from the plugin HTTP route.
+   *
+   * @param name Skill id (slug).
+   * @param filePath Skill-root-relative file path.
+   * @returns Upstream status, headers and body bytes.
+   */
+  public async downloadSkillFile(
+    name: string,
+    filePath: string
+  ): Promise<OpenClawAgentSkillsHttpResult> {
+    return this.client.downloadSkillFile(name, filePath);
   }
 
   public async listEnabledSkillsByQuery(name?: string): Promise<DigitalHumanSkillList> {

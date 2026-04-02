@@ -232,6 +232,46 @@ export function createSkillsRouter(): Router {
   );
 
   router.get(
+    "/api/dip-studio/v1/skills/:name/download",
+    async (
+      request: Request,
+      response: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const raw = request.params.name;
+        const name = decodeURIComponent(
+          Array.isArray(raw) ? String(raw[0]) : String(raw ?? "")
+        ).trim();
+
+        if (!isValidSkillSlug(name)) {
+          throw new HttpError(400, "Path parameter name must be a valid skill id");
+        }
+
+        const filePath = parseSkillFilePathQuery(request.query);
+        const result = await agentSkillsLogic.downloadSkillFile(name, filePath);
+        const contentType = result.headers.get("content-type");
+        const contentDisposition = result.headers.get("content-disposition");
+
+        if (contentType !== null) {
+          response.setHeader("content-type", contentType);
+        }
+        if (contentDisposition !== null) {
+          response.setHeader("content-disposition", contentDisposition);
+        }
+
+        response.status(result.status).send(Buffer.from(result.body));
+      } catch (error) {
+        next(
+          error instanceof HttpError
+            ? error
+            : new HttpError(502, "Failed to download skill file")
+        );
+      }
+    }
+  );
+
+  router.get(
     "/api/dip-studio/v1/digital-human/:id/skills",
     async (
       request: Request,

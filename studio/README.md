@@ -331,6 +331,28 @@ GitHub：https://github.com/kweaver-ai/web
 | bytes | integer | 文件实际大小（字节） |
 | truncated | boolean | 是否因预览上限被截断 |
 
+#### 下载技能文件
+
+`GET /api/dip-studio/v1/skills/{name}/download`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| name | string | 技能 ID |
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+| -- | -- | -- |
+| path | string | 技能目录内文件的相对路径；不传时默认 `SKILL.md` |
+
+说明：
+
+- 返回原始文件字节流，适合浏览器直接下载。
+- 仅允许下载技能目录内的普通文件。
+- 响应会尽量透传 `content-type` 和 `content-disposition`。
+
 #### 安装 .skill 包（zip）
 
 `POST /api/dip-studio/v1/skills/install`

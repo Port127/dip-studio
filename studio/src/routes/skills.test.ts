@@ -20,10 +20,13 @@ afterEach(() => {
 function createResponseDouble(): Response {
   const response = {
     status: vi.fn(),
-    json: vi.fn()
+    json: vi.fn(),
+    send: vi.fn(),
+    setHeader: vi.fn()
   } as unknown as Response;
 
   vi.mocked(response.status).mockReturnValue(response);
+  vi.mocked(response.send).mockReturnValue(response);
 
   return response;
 }
@@ -111,6 +114,7 @@ async function importRouterWithLogicMock(
     uninstallSkill?: (name: string) => Promise<unknown>;
     getSkillTree?: (name: string) => Promise<unknown>;
     getSkillContent?: (name: string, path: string) => Promise<unknown>;
+    downloadSkillFile?: (name: string, path: string) => Promise<unknown>;
     getSkillStatuses?: () => Promise<
       Array<{
         skillKey: string;
@@ -154,6 +158,13 @@ async function importRouterWithLogicMock(
           bytes: 0,
           truncated: false
         }),
+      downloadSkillFile:
+        logic.downloadSkillFile ??
+        vi.fn().mockResolvedValue({
+          status: 200,
+          headers: new Headers(),
+          body: new Uint8Array()
+        }),
       getSkillStatuses:
         logic.getSkillStatuses ??
         vi.fn().mockResolvedValue([
@@ -173,6 +184,7 @@ describe("createSkillsRouter", () => {
   const skillsPath = "/api/dip-studio/v1/skills";
   const skillTreePath = "/api/dip-studio/v1/skills/:name/tree";
   const skillContentPath = "/api/dip-studio/v1/skills/:name/content";
+  const skillDownloadPath = "/api/dip-studio/v1/skills/:name/download";
   const skillsInstallPath = "/api/dip-studio/v1/skills/install";
   const digitalHumanSkillsPath = "/api/dip-studio/v1/digital-human/:id/skills";
 
@@ -214,6 +226,15 @@ describe("createSkillsRouter", () => {
     const router = createSkillsRouter() as Router;
 
     expect(findHandler(router, "get", skillContentPath)).toBeDefined();
+  });
+
+  it("registers GET /api/dip-studio/v1/skills/:name/download", async () => {
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => []
+    });
+    const router = createSkillsRouter() as Router;
+
+    expect(findHandler(router, "get", skillDownloadPath)).toBeDefined();
   });
 
   it("returns skill tree by name", async () => {
@@ -356,6 +377,41 @@ describe("createSkillsRouter", () => {
       bytes: 9,
       truncated: false
     });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("downloads skill file and forwards response headers", async () => {
+    const downloadSkillFile = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: new Headers({
+        "content-type": "text/markdown",
+        "content-disposition": 'attachment; filename="SKILL.md"'
+      }),
+      body: new Uint8Array(Buffer.from("# Skill\n"))
+    });
+    const { createSkillsRouter } = await importRouterWithLogicMock({
+      listEnabledSkills: async () => [],
+      downloadSkillFile
+    });
+    const router = createSkillsRouter() as Router;
+    const handler = findHandler(router, "get", skillDownloadPath);
+    const response = createResponseDouble();
+    const next = vi.fn<NextFunction>();
+
+    await handler?.(
+      { params: { name: "weather" }, query: {} } as unknown as Request,
+      response,
+      next
+    );
+
+    expect(downloadSkillFile).toHaveBeenCalledWith("weather", "SKILL.md");
+    expect(response.setHeader).toHaveBeenCalledWith("content-type", "text/markdown");
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "content-disposition",
+      'attachment; filename="SKILL.md"'
+    );
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.send).toHaveBeenCalledWith(Buffer.from("# Skill\n"));
     expect(next).not.toHaveBeenCalled();
   });
 

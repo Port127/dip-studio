@@ -46,6 +46,24 @@ export function readSkillFilePreview(
   relativePath: string,
   maxBytes = DEFAULT_SKILL_PREVIEW_MAX_BYTES
 ): SkillFilePreview {
+  const { absolutePath, relativePath: normalizedPath, bytes } =
+    resolveSkillFilePath(skillDir, relativePath);
+
+  const previewBytes = fs.readFileSync(absolutePath);
+  const content = previewBytes.subarray(0, maxBytes).toString("utf8");
+
+  return {
+    path: normalizedPath,
+    content,
+    bytes,
+    truncated: bytes > maxBytes
+  };
+}
+
+export function resolveSkillFilePath(
+  skillDir: string,
+  relativePath: string
+): { absolutePath: string; relativePath: string; bytes: number } {
   const normalizedSkillDir = path.resolve(skillDir);
   ensureSkillDirectoryExists(normalizedSkillDir);
 
@@ -66,15 +84,10 @@ export function readSkillFilePreview(
     throw new SkillTreeError("NOT_A_FILE", `Skill path is not a file: ${normalizedPath}`);
   }
 
-  const bytes = stat.size;
-  const previewBytes = fs.readFileSync(absolutePath);
-  const content = previewBytes.subarray(0, maxBytes).toString("utf8");
-
   return {
-    path: toPosixPath(relativeToRoot),
-    content,
-    bytes,
-    truncated: bytes > maxBytes
+    absolutePath,
+    relativePath: toPosixPath(relativeToRoot),
+    bytes: stat.size
   };
 }
 

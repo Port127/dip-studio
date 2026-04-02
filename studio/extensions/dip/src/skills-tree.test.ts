@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   listSkillTreeEntries,
   readSkillFilePreview,
+  resolveSkillFilePath,
   SkillTreeError
 } from "./skills-tree.js";
 
@@ -123,5 +124,19 @@ describe("listSkillTreeEntries", () => {
       SkillTreeError
     );
     expect(() => readSkillFilePreview(root, "docs")).toThrowError(SkillTreeError);
+  });
+
+  it("resolves file path for download", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "dip-skill-download-"));
+    tempDirs.push(root);
+
+    fs.mkdirSync(path.join(root, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(root, "docs", "guide.md"), "hello\n");
+
+    expect(resolveSkillFilePath(root, "docs/guide.md")).toEqual({
+      absolutePath: path.join(root, "docs", "guide.md"),
+      relativePath: "docs/guide.md",
+      bytes: 6
+    });
   });
 });
