@@ -18,17 +18,11 @@ spec:
         {{- toYaml .Values.labels.pod | nindent 8 }}
     spec:
       volumes:
-        {{- if .Values.persistence.workspace.enabled }}
-        - name: openclaw-workspace
+        {{- if .Values.persistence.openclaw.enabled }}
+        - name: openclaw-data
           hostPath:
-            path: {{ .Values.persistence.workspace.hostPath }}
+            path: {{ .Values.persistence.openclaw.hostPath }}
             type: DirectoryOrCreate
-        {{- end }}
-        {{- if .Values.persistence.config.enabled }}
-        - name: openclaw-config
-          hostPath:
-            path: {{ .Values.persistence.config.hostPath }}
-            type: FileOrCreate
         {{- end }}
       containers:
         - name: dip-studio
@@ -102,13 +96,9 @@ spec:
           resources:
             {{- toYaml .Values.resources.studio | nindent 12 }}
           volumeMounts:
-            {{- if .Values.persistence.workspace.enabled }}
-            - name: openclaw-workspace
-              mountPath: {{ .Values.persistence.workspace.mountPath }}
-            {{- end }}
-            {{- if .Values.persistence.config.enabled }}
-            - name: openclaw-config
-              mountPath: {{ .Values.persistence.config.mountPath }}
+            {{- if .Values.persistence.openclaw.enabled }}
+            - name: openclaw-data
+              mountPath: {{ .Values.persistence.openclaw.mountPath }}
             {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
