@@ -62,7 +62,7 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: {{ .Chart.Name }}-config
-                  key: OPENCLAW_GATEWAY_PORT_STUDIO
+                  key: OPENCLAW_GATEWAY_PORT
             - name: OPENCLAW_GATEWAY_TIMEOUT_MS
               valueFrom:
                 configMapKeyRef:
@@ -72,7 +72,12 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: {{ .Chart.Name }}-config
-                  key: OPENCLAW_WORKSPACE_DIR_STUDIO
+                  key: OPENCLAW_WORKSPACE_DIR
+            - name: OPENCLAW_ROOT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Chart.Name }}-config
+                  key: OPENCLAW_ROOT_DIR
             - name: OPENCLAW_CONFIG_PATH
               valueFrom:
                 configMapKeyRef:

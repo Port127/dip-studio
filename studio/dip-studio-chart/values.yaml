@@ -43,9 +43,10 @@ studio:
   gatewayHost: 127.0.0.1
   gatewayPort: 19001
   gatewayTimeoutMs: 5000
-  configPath: /data/openclaw/openclaw.json
-  workspaceDir: /data/openclaw/workspace
-  bknBackendUrl: http://127.0.0.1:13014
+  configPath: /data/.openclaw/openclaw.json
+  workspaceDir: /data/.openclaw/workspace
+  rootDir: /data/.openclaw
+  bknBackendUrl: http://bkn-backend-svc:13014
   hydraAdminUrl: http://hydra-admin:4445
 
 resources:
@@ -61,7 +62,7 @@ persistence:
   openclaw:
     enabled: true
     hostPath: /Users/yannan/.openclaw
-    mountPath: /data/openclaw
+    mountPath: /data/.openclaw
 
 nodeSelector: {}
 affinity: {}
