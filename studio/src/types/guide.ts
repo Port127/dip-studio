@@ -37,7 +37,7 @@ export interface GuideStatusResponse {
 }
 
 /**
- * OpenClaw connection information discovered from the local deployment.
+ * OpenClaw connection information discovered from injected runtime environment variables.
  */
 export interface OpenClawDetectedConfig {
   /**
@@ -56,7 +56,7 @@ export interface OpenClawDetectedConfig {
   port: number;
 
   /**
-   * Gateway auth token loaded from the OpenClaw config file.
+   * Gateway auth token loaded from injected environment variables.
    */
   token: string;
 }

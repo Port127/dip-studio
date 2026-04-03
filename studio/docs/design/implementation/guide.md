@@ -13,16 +13,15 @@ participant BE as Studio Backend (Express)
 participant OC as OpenClaw
 
 opt 配置 OpenClaw 连接信息
-  SW ->> BE: 获取连接状态
   activate BE
-  BE ->> BE: 读取 .env
+  BE ->> BE: 读取 .env 文件
 
   alt 已配置 OpenClaw 连接
     BE ->> SW: 返回 ready 状态
   end
 
-  alt  未配置 OpenClaw 连接
-    BE ->> OC: 获取 OpenClaw 配置
+  alt 未配置 OpenClaw 连接
+    BE ->> OC: 从 ENV 中获取 OpenClaw 配置
     BE ->> SW: 返回配置
     SW ->> SW: 确认配置
   end
@@ -46,37 +45,20 @@ end
 ## openclaw 命令
 
 ### 读取 OpenClaw 配置
-执行命令：`openclaw gateway status`，从输出中读取 OpenClaw 配置文件路径、网关协议、地址和端口。
+从 .env 文件中检查以下参数：
 
-- 如果命令返回 `command not found: openclaw`，表示未部署 OpenClaw。
-- 命令执行成功后，提取以下结构：
+  * OPENCLAW_GATEWAY_PROTOCOL
+  * OPENCLAW_GATEWAY_HOST
+  * OPENCLAW_GATEWAY_PORT
+  * OPENCLAW_GATEWAY_TOKEN
 
-1. `config_path`：
-```bash
-Config (service): {{ config_path }}
-```
-例如：`Config (service): ~/.openclaw-dev/openclaw.json`
-
-2. `protocol`、`host` 和 `port`：
-```bash
-Probe target: {{ protocol }}://{{ host }}:{{ port }}
-```
-例入：`Probe target: ws://127.0.0.1:19001`
-
-### 读取 token
-
-从 `config_path` 中读取 `gateway.auth.token` 字段。 
+如果有任意参数缺失，则表示 DIP Studio 未完成与 OpenClaw 的连接配置。
 
 ## 初始化 Studio
 
 #### 配置连接信息
 
-Studio Backend 读取完配置（成功或失败）后：
-
-- 如果未部署 OpenClaw，返回 500 错误
-- 如果读取到配置，返回配置信息
-
-用户可以在 Web 修改配置信息，配置项包括：
+Studio Backend 读取完配置后，向前端返回配置信息，用户可以在 Web 修改配置信息。配置项包括：
 
 * OpenClaw 网关连接地址
 * OpenClaw 网关 Token（不显示明文）
@@ -95,7 +77,7 @@ openssl pkey -in private.pem -pubout -out public.pem
 ```
 4. 执行 `npm run init:agents` 初始化 OpenClaw 默认配置、built-in agents 以及 extensions。
 5. 初始化成功后，与 OpenClaw Gateway 建立 WebSocket 连接。
-6. 连接成功后，追加 KWEAVER_BASE_URL 和 KWEAVER_TOKEN 到 OpenClaw 根目录下的 .env 文件（没有则创建）
+6. 连接成功后，追加 KWEAVER_BASE_URL 和 KWEAVER_TOKEN 到 {OPENCLAW_ROOT_DIR} 目录下的 .env 文件（没有则创建）
 
 #### 创建数字员工
 

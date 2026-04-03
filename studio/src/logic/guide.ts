@@ -23,31 +23,6 @@ import type {
 } from "../types/guide";
 
 /**
- * Raw OpenClaw status fields parsed from the local command output.
- */
-export interface ParsedOpenClawGatewayStatus {
-  /**
-   * Raw config file path emitted by `openclaw gateway status`.
-   */
-  configPath: string;
-
-  /**
-   * Resolved gateway protocol.
-   */
-  protocol: "ws" | "wss";
-
-  /**
-   * Resolved gateway host.
-   */
-  host: string;
-
-  /**
-   * Resolved gateway port.
-   */
-  port: number;
-}
-
-/**
  * Internal normalized payload used by the initialization workflow.
  */
 export interface NormalizedInitializeGuideRequest {
@@ -166,7 +141,6 @@ export interface GuideLogicOptions {
     reconfigureConnection(url: string, token?: string): void;
     connect(): Promise<void>;
   };
-
 }
 
 /**
@@ -181,7 +155,7 @@ export interface GuideLogic {
   getStatus(): Promise<GuideStatusResponse>;
 
   /**
-   * Discovers local OpenClaw connection settings from the current node.
+   * Reads OpenClaw connection settings from injected runtime environment variables.
    *
    * @returns The detected OpenClaw configuration.
    */
@@ -268,47 +242,7 @@ export class DefaultGuideLogic implements GuideLogic {
    * @returns The detected OpenClaw configuration.
    */
   public async getOpenClawConfig(): Promise<OpenClawDetectedConfig> {
-    let statusOutput: GuideCommandResult;
-
-    try {
-      statusOutput = await this.commandRunner.execFile("openclaw", ["gateway", "status"]);
-    } catch (error) {
-      const message = asMessage(error);
-
-      if (message.includes("ENOENT") || message.includes("not found")) {
-        throw new HttpError(
-          500,
-          "OpenClaw is not installed on this node",
-          "OPENCLAW_CMD_NOT_FOUND"
-        );
-      }
-
-      throw new HttpError(502, `Failed to read OpenClaw status: ${message}`);
-    }
-
-    const parsedStatus = parseOpenClawGatewayStatus(statusOutput.stdout);
-    const configPath = resolveOpenClawConfigPath(
-      parsedStatus.configPath,
-      this.studioRootDir
-    );
-
-    let rawConfig: string;
-    try {
-      rawConfig = await readFile(configPath, "utf8");
-    } catch (error) {
-      throw new HttpError(
-        502,
-        `Failed to read OpenClaw config file: ${asMessage(error)}`
-      );
-    }
-
-    const token = readGatewayTokenFromConfig(rawConfig);
-    return {
-      protocol: parsedStatus.protocol,
-      host: parsedStatus.host,
-      port: parsedStatus.port,
-      token
-    };
+    return readOpenClawDetectedConfigFromEnv(process.env);
   }
 
   /**
@@ -320,10 +254,7 @@ export class DefaultGuideLogic implements GuideLogic {
   public async initialize(
     request: InitializeGuideRequest
   ): Promise<void> {
-    const localPaths = await resolveOpenClawLocalPaths(
-      this.commandRunner,
-      this.studioRootDir
-    );
+    const localPaths = resolveOpenClawLocalPathsFromEnv(process.env, this.studioRootDir);
     const normalized = normalizeInitializeGuideRequest(request, localPaths);
     const envFilePath = join(this.studioRootDir, ".env");
     const envExamplePath = join(this.studioRootDir, ".env.example");
@@ -374,40 +305,17 @@ export class DefaultGuideLogic implements GuideLogic {
 }
 
 /**
- * Parses `openclaw gateway status` output.
+ * Resolves one possibly relative or home-relative path into an absolute path.
  *
- * @param output Raw command stdout.
- * @returns The parsed config path and gateway target.
- * @throws {HttpError} Thrown when required fields cannot be extracted.
+ * @param rawPath Raw filesystem path.
+ * @param baseDir Base directory used to resolve relative paths.
+ * @returns The absolute path.
  */
-export function parseOpenClawGatewayStatus(output: string): ParsedOpenClawGatewayStatus {
-  const configMatch = output.match(/^Config \(service\):\s*(.+)$/m);
-  const probeMatch = output.match(/^Probe target:\s*(ws|wss):\/\/([^:\s/]+):(\d+)$/m);
-
-  if (!configMatch || !probeMatch) {
-    throw new HttpError(502, "Failed to parse OpenClaw gateway status output");
-  }
-
-  return {
-    configPath: configMatch[1].trim(),
-    protocol: resolveGatewayProtocol(probeMatch[1]),
-    host: resolveGatewayHost(probeMatch[2]),
-    port: resolveGatewayPort(probeMatch[3])
-  };
-}
-
-/**
- * Resolves an OpenClaw config path into an absolute filesystem path.
- *
- * @param configPath Raw path parsed from `openclaw gateway status`.
- * @param baseDir Base directory used for resolving relative paths.
- * @returns The absolute config path.
- */
-export function resolveOpenClawConfigPath(
-  configPath: string,
+export function resolveInjectedPath(
+  rawPath: string,
   baseDir: string = process.cwd()
 ): string {
-  const trimmed = configPath.trim();
+  const trimmed = rawPath.trim();
 
   if (trimmed.startsWith("~/")) {
     return resolve(homedir(), trimmed.slice(2));
@@ -417,34 +325,31 @@ export function resolveOpenClawConfigPath(
 }
 
 /**
- * Reads the gateway token from one parsed OpenClaw config JSON string.
+ * Reads OpenClaw connection information from injected environment variables.
  *
- * @param rawConfig Raw JSON content.
- * @returns The resolved gateway auth token.
- * @throws {HttpError} Thrown when the config is invalid or the token is missing.
+ * @param envSource Environment variable source.
+ * @returns The resolved gateway configuration.
+ * @throws {HttpError} Thrown when required variables are missing.
  */
-export function readGatewayTokenFromConfig(rawConfig: string): string {
-  let parsed: unknown;
+export function readOpenClawDetectedConfigFromEnv(
+  envSource: NodeJS.ProcessEnv
+): OpenClawDetectedConfig {
+  const token = readOptionalString(envSource.OPENCLAW_GATEWAY_TOKEN);
 
-  try {
-    parsed = JSON.parse(rawConfig);
-  } catch (error) {
-    throw new HttpError(502, `OpenClaw config is not valid JSON: ${asMessage(error)}`);
+  if (token === undefined) {
+    throw new HttpError(
+      500,
+      "OpenClaw connection info is missing from environment",
+      "OPENCLAW_ENV_NOT_FOUND"
+    );
   }
 
-  const token = (parsed as {
-    gateway?: {
-      auth?: {
-        token?: string;
-      };
-    };
-  }).gateway?.auth?.token;
-
-  if (typeof token !== "string" || token.trim() === "") {
-    throw new HttpError(502, "OpenClaw gateway token is missing from config");
-  }
-
-  return token.trim();
+  return {
+    protocol: resolveGatewayProtocol(envSource.OPENCLAW_GATEWAY_PROTOCOL),
+    host: resolveGatewayHost(envSource.OPENCLAW_GATEWAY_HOST),
+    port: resolveGatewayPort(envSource.OPENCLAW_GATEWAY_PORT),
+    token
+  };
 }
 
 /**
@@ -585,29 +490,39 @@ export function buildOpenClawRootEnvEntries(
 }
 
 /**
- * Resolves OpenClaw local filesystem paths from `openclaw gateway status`.
+ * Resolves OpenClaw local filesystem paths from injected environment variables.
  *
- * @param commandRunner Command runner used to invoke the local CLI.
- * @param studioRootDir Base directory used to resolve relative config paths.
+ * @param envSource Environment variable source.
+ * @param studioRootDir Base directory used to resolve relative paths.
  * @returns The resolved config, state, and workspace paths.
  */
-export async function resolveOpenClawLocalPaths(
-  commandRunner: GuideCommandRunner,
+export function resolveOpenClawLocalPathsFromEnv(
+  envSource: NodeJS.ProcessEnv,
   studioRootDir: string
-): Promise<{
+): {
   configPath: string;
   stateDir: string;
   workspaceDir: string;
-}> {
-  const statusOutput = await commandRunner.execFile("openclaw", ["gateway", "status"]);
-  const parsedStatus = parseOpenClawGatewayStatus(statusOutput.stdout);
-  const configPath = resolveOpenClawConfigPath(parsedStatus.configPath, studioRootDir);
-  const stateDir = dirname(configPath);
+} {
+  const configuredRootDir = readOptionalString(envSource.OPENCLAW_ROOT_DIR);
+  const configuredConfigPath = readOptionalString(envSource.OPENCLAW_CONFIG_PATH);
+  const stateDir = resolveInjectedPath(
+    configuredRootDir ?? dirname(configuredConfigPath ?? join(homedir(), ".openclaw", "openclaw.json")),
+    studioRootDir
+  );
+  const configPath = resolveInjectedPath(
+    configuredConfigPath ?? join(stateDir, "openclaw.json"),
+    studioRootDir
+  );
+  const configuredWorkspaceDir = readOptionalString(envSource.OPENCLAW_WORKSPACE_DIR);
 
   return {
     configPath,
     stateDir,
-    workspaceDir: resolveWorkspaceDir(stateDir)
+    workspaceDir: resolveInjectedPath(
+      configuredWorkspaceDir ?? resolveWorkspaceDir(stateDir),
+      studioRootDir
+    )
   };
 }
 
@@ -621,6 +536,7 @@ export async function mergeOpenClawRootEnv(
   envFilePath: string,
   entries: ReadonlyArray<readonly [string, string]>
 ): Promise<void> {
+  await mkdir(dirname(envFilePath), { recursive: true });
   const current = (await pathExists(envFilePath))
     ? await readFile(envFilePath, "utf8")
     : "";

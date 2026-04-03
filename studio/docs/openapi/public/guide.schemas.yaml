@@ -50,6 +50,7 @@ components:
           minimum: 1
         token:
           type: string
+          description: 从运行时注入环境变量中读取的 Gateway Token
 
     GuideInitializeRequest:
       type: object

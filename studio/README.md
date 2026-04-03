@@ -133,7 +133,7 @@ GitHub：https://github.com/kweaver-ai/web
 | protocol | string | OpenClaw Gateway 协议，枚举值：`ws`、`wss` |
 | host | string | OpenClaw Gateway 主机地址 |
 | port | integer | OpenClaw Gateway 端口 |
-| token | string | 从本机 OpenClaw 配置中读取的 Gateway Token |
+| token | string | 从运行时注入环境变量中读取的 Gateway Token |
 
 错误响应：`500`、`502`
 
