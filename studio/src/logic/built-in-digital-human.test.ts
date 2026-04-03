@@ -110,6 +110,47 @@ describe("DefaultBuiltInDigitalHumanLogic", () => {
     });
   });
 
+  it("uses avatar.png base64 as icon_id when creating a built-in digital human", async () => {
+    builtInRootDir = await mkdtemp(join(tmpdir(), "dip-built-in-dh-avatar-create-"));
+    const templateDir = join(builtInRootDir, "bkn-creator");
+    const avatarBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+    await mkdir(templateDir, { recursive: true });
+    await writeFile(
+      join(templateDir, "metadata.json"),
+      JSON.stringify({
+        type: "digital-human",
+        id: "__bkn_creator__",
+        name: "BKN Creator",
+        is_builtin: true
+      }),
+      "utf8"
+    );
+    await writeFile(join(templateDir, "IDENTITY.md"), "- Name: BKN Creator\n", "utf8");
+    await writeFile(join(templateDir, "SOUL.md"), "Built-in soul\n", "utf8");
+    await writeFile(join(templateDir, "avatar.png"), avatarBytes);
+
+    const digitalHumanLogic = {
+      getDigitalHuman: vi.fn().mockRejectedValue(new HttpError(404, "Digital human not found")),
+      createDigitalHuman: vi.fn().mockResolvedValue({ id: "agent-1", name: "BKN Creator" })
+    };
+    const logic = new DefaultBuiltInDigitalHumanLogic({ builtInRootDir });
+
+    await logic.createBuiltInDigitalHumans(["__bkn_creator__"], {
+      agentSkillsLogic: { installSkill: vi.fn() } as never,
+      digitalHumanLogic: digitalHumanLogic as never
+    });
+
+    expect(digitalHumanLogic.createDigitalHuman).toHaveBeenCalledWith({
+      id: "__bkn_creator__",
+      name: "BKN Creator",
+      creature: undefined,
+      icon_id: avatarBytes.toString("base64"),
+      soul: "Built-in soul\n",
+      bkn: undefined,
+      skills: []
+    });
+  });
+
   it("updates an existing built-in digital human by merging current and new skills", async () => {
     builtInRootDir = await mkdtemp(join(tmpdir(), "dip-built-in-dh-update-"));
     const templateDir = join(builtInRootDir, "bkn-creator");
@@ -170,6 +211,54 @@ describe("DefaultBuiltInDigitalHumanLogic", () => {
       soul: "Updated soul\n",
       bkn: undefined,
       skills: ["archive-protocol", "create-bkn", "data-semantic"]
+    });
+  });
+
+  it("uses avatar.png base64 as icon_id when updating a built-in digital human", async () => {
+    builtInRootDir = await mkdtemp(join(tmpdir(), "dip-built-in-dh-avatar-update-"));
+    const templateDir = join(builtInRootDir, "bkn-creator");
+    const avatarBytes = Buffer.from("avatar-content", "utf8");
+    await mkdir(templateDir, { recursive: true });
+    await writeFile(
+      join(templateDir, "metadata.json"),
+      JSON.stringify({
+        type: "digital-human",
+        id: "__bkn_creator__",
+        name: "BKN Creator",
+        is_builtin: true
+      }),
+      "utf8"
+    );
+    await writeFile(join(templateDir, "IDENTITY.md"), "- Name: BKN Creator\n", "utf8");
+    await writeFile(join(templateDir, "SOUL.md"), "Updated soul\n", "utf8");
+    await writeFile(join(templateDir, "avatar.png"), avatarBytes);
+
+    const digitalHumanLogic = {
+      getDigitalHuman: vi.fn().mockResolvedValue({
+        id: "__bkn_creator__",
+        name: "BKN Creator",
+        soul: "Old soul\n",
+        skills: ["archive-protocol"]
+      }),
+      createDigitalHuman: vi.fn(),
+      updateDigitalHuman: vi
+        .fn()
+        .mockResolvedValue({ id: "__bkn_creator__", name: "BKN Creator" })
+    };
+    const logic = new DefaultBuiltInDigitalHumanLogic({ builtInRootDir });
+
+    await logic.createBuiltInDigitalHumans(["__bkn_creator__"], {
+      agentSkillsLogic: { installSkill: vi.fn() } as never,
+      digitalHumanLogic: digitalHumanLogic as never
+    });
+
+    expect(digitalHumanLogic.updateDigitalHuman).toHaveBeenCalledWith("__bkn_creator__", {
+      name: "BKN Creator",
+      creature: undefined,
+      icon_id: avatarBytes.toString("base64"),
+      soul: "Updated soul\n",
+      bkn: undefined,
+      skills: ["archive-protocol"]
     });
   });
 

@@ -57,6 +57,11 @@ export interface BuiltInDigitalHumanDefinition {
   soulPath: string;
 
   /**
+   * Absolute path to the optional built-in avatar image file.
+   */
+  avatarPath?: string;
+
+  /**
    * Absolute paths to packaged `.skill` archives to install first.
    */
   skillPaths: string[];
@@ -194,6 +199,10 @@ export class DefaultBuiltInDigitalHumanLogic implements BuiltInDigitalHumanLogic
         readFile(definition.soulPath, "utf8")
       ]);
       const template = mergeFilesToTemplate(identityContent, soulContent);
+      const resolvedIconId = await resolveBuiltInIconId(
+        definition,
+        template.identity.icon_id
+      );
       const existing = await getExistingBuiltInDigitalHuman(
         dependencies.digitalHumanLogic,
         definition.id
@@ -205,7 +214,7 @@ export class DefaultBuiltInDigitalHumanLogic implements BuiltInDigitalHumanLogic
             id: definition.id,
             name: template.identity.name || definition.name,
             creature: template.identity.creature,
-            icon_id: template.identity.icon_id,
+            icon_id: resolvedIconId,
             soul: template.soul,
             bkn: template.bkn,
             skills: installedSkills
@@ -218,7 +227,7 @@ export class DefaultBuiltInDigitalHumanLogic implements BuiltInDigitalHumanLogic
         await dependencies.digitalHumanLogic.updateDigitalHuman(definition.id, {
           name: template.identity.name || definition.name,
           creature: template.identity.creature,
-          icon_id: template.identity.icon_id,
+          icon_id: resolvedIconId,
           soul: template.soul,
           bkn: template.bkn,
           skills: mergeSkillNames(existing.skills, installedSkills)
@@ -294,6 +303,7 @@ export async function loadDefinitionFromDirectory(
   const name = normalizeRequiredMetadataString(metadata.name, "name", directory);
   const identityPath = join(directory, "IDENTITY.md");
   const soulPath = join(directory, "SOUL.md");
+  const avatarPath = join(directory, "avatar.png");
 
   let skillPaths: string[] = [];
   try {
@@ -313,6 +323,7 @@ export async function loadDefinitionFromDirectory(
     directory,
     identityPath,
     soulPath,
+    avatarPath,
     skillPaths
   };
 }
@@ -459,4 +470,29 @@ function mergeSkillNames(
   installedSkills: string[]
 ): string[] {
   return uniqueNonEmptyStrings([...(currentSkills ?? []), ...installedSkills]);
+}
+
+/**
+ * Resolves the icon payload for one built-in template.
+ * When `avatar.png` exists beside the template files, its raw bytes are encoded
+ * as base64 and sent through `icon_id`; otherwise the IDENTITY.md value is used.
+ *
+ * @param definition Built-in template definition.
+ * @param fallbackIconId Icon value parsed from IDENTITY.md.
+ * @returns Base64 avatar payload or the fallback icon id.
+ */
+async function resolveBuiltInIconId(
+  definition: BuiltInDigitalHumanDefinition,
+  fallbackIconId: string | undefined
+): Promise<string | undefined> {
+  if (!definition.avatarPath) {
+    return fallbackIconId;
+  }
+
+  try {
+    const avatar = await readFile(definition.avatarPath);
+    return avatar.toString("base64");
+  } catch {
+    return fallbackIconId;
+  }
 }
